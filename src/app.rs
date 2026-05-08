@@ -190,16 +190,39 @@ impl App {
                     }
                     return;
                 }
+                KeyCode::Char('e') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+                        let session_name = std::path::Path::new(&cwd)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "editor".to_string());
+                        let cmd = format!("{editor} .");
+                        if let Ok(name) = tmux::create_session(&session_name, &cwd, Some(&cmd), &[]) {
+                            tmux::switch_to_pane(&name);
+                            self.should_quit = true;
+                        }
+                    }
+                    return;
+                }
+                KeyCode::Char('t') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+                        let session_name = std::path::Path::new(&cwd)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "terminal".to_string());
+                        if let Ok(name) = tmux::create_session(&session_name, &cwd, Some(&shell), &[]) {
+                            tmux::switch_to_pane(&name);
+                            self.should_quit = true;
+                        }
+                    }
+                    return;
+                }
                 KeyCode::Char(c @ '1'..='9') => {
                     let idx = (c as usize) - ('1' as usize);
                     if idx < total {
                         self.view_selected_agent = idx;
-                        if let Some(session) = self.selected_compact_session() {
-                            if let Some(target) = session.pane_target.clone() {
-                                tmux::switch_to_pane(&target);
-                                self.should_quit = true;
-                            }
-                        }
                     }
                     return;
                 }
@@ -242,6 +265,35 @@ impl App {
                             .map(|n| n.to_string_lossy().to_string())
                             .unwrap_or_else(|| "claude".to_string());
                         if let Ok(name) = tmux::create_session(&default_name, &cwd, None, &[]) {
+                            tmux::switch_to_pane(&name);
+                            self.should_quit = true;
+                        }
+                    }
+                    return;
+                }
+                KeyCode::Char('e') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+                        let session_name = std::path::Path::new(&cwd)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "editor".to_string());
+                        let cmd = format!("{editor} .");
+                        if let Ok(name) = tmux::create_session(&session_name, &cwd, Some(&cmd), &[]) {
+                            tmux::switch_to_pane(&name);
+                            self.should_quit = true;
+                        }
+                    }
+                    return;
+                }
+                KeyCode::Char('t') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+                        let session_name = std::path::Path::new(&cwd)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "terminal".to_string());
+                        if let Ok(name) = tmux::create_session(&session_name, &cwd, Some(&shell), &[]) {
                             tmux::switch_to_pane(&name);
                             self.should_quit = true;
                         }
