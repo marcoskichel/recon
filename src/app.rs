@@ -13,7 +13,6 @@ pub struct App {
     pub selected: usize,
     pub should_quit: bool,
     pub tick: u64,
-    pub view_page: usize,
     pub view_zoomed_room: Option<String>,
     pub view_zoom_index: Option<usize>,
     pub view_selected_agent: usize,
@@ -33,7 +32,6 @@ impl App {
             selected: 0,
             should_quit: false,
             tick: 0,
-            view_page: 0,
             view_zoomed_room: None,
             view_zoom_index: None,
             view_selected_agent: 0,
@@ -272,12 +270,6 @@ impl App {
                 } else {
                     self.should_quit = true;
                 }
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.view_page = self.view_page.saturating_add(1);
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.view_page = self.view_page.saturating_sub(1);
             }
             KeyCode::Char(c @ '1'..='9') => {
                 let idx = (c as usize) - ('1' as usize);
