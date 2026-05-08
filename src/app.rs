@@ -227,6 +227,24 @@ impl App {
                     }
                     return;
                 }
+                KeyCode::Char('g') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        self.open_tui_tool("lazygit", &cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('d') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        self.open_tui_tool("diffnav", &cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('D') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        self.open_tui_tool("dash", &cwd);
+                    }
+                    return;
+                }
                 KeyCode::Char(c @ '1'..='9') => {
                     let idx = (c as usize) - ('1' as usize);
                     if idx < total {
@@ -305,6 +323,24 @@ impl App {
                             tmux::switch_to_pane(&name);
                             self.should_quit = true;
                         }
+                    }
+                    return;
+                }
+                KeyCode::Char('g') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        self.open_tui_tool("lazygit", &cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('d') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        self.open_tui_tool("diffnav", &cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('D') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        self.open_tui_tool("dash", &cwd);
                     }
                     return;
                 }
@@ -474,6 +510,20 @@ impl App {
         self.selected_zoomed_session().map(|s| s.cwd.clone())
     }
 
+    fn open_tui_tool(&mut self, binary: &str, cwd: &str) {
+        if !binary_in_path(binary) {
+            return;
+        }
+        let label = std::path::Path::new(cwd)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| binary.to_string());
+        if let Ok(name) = tmux::create_session(&label, cwd, Some(binary), &[]) {
+            tmux::switch_to_pane(&name);
+            self.should_quit = true;
+        }
+    }
+
     fn compact_flat_session_indices(&self) -> Vec<usize> {
         let filtered = self.filtered_indices();
         let rooms = view_ui::group_into_rooms_stable(&self.sessions, &filtered, &self.view_room_order);
@@ -574,4 +624,10 @@ impl App {
         }
         g
     }
+}
+
+fn binary_in_path(name: &str) -> bool {
+    std::env::var("PATH").ok().map(|path| {
+        path.split(':').any(|dir| std::path::Path::new(dir).join(name).is_file())
+    }).unwrap_or(false)
 }

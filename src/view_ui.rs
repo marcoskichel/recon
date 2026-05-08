@@ -2066,6 +2066,12 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" editor  "));
         spans.push(Span::styled("t", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" terminal  "));
+        spans.push(Span::styled("g", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" lazygit  "));
+        spans.push(Span::styled("d", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" diffnav  "));
+        spans.push(Span::styled("D", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" dash  "));
     } else {
         spans.push(Span::styled("1-9", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" select  "));
@@ -2075,6 +2081,12 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" editor  "));
         spans.push(Span::styled("t", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" terminal  "));
+        spans.push(Span::styled("g", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" lazygit  "));
+        spans.push(Span::styled("d", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" diffnav  "));
+        spans.push(Span::styled("D", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" dash  "));
     }
 
     spans.push(Span::styled("/", Style::default().fg(Color::Cyan)));
