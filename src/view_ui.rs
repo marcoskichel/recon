@@ -2062,9 +2062,19 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" kill  "));
         spans.push(Span::styled("n", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" new  "));
+        spans.push(Span::styled("e", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" editor  "));
+        spans.push(Span::styled("t", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" terminal  "));
     } else {
         spans.push(Span::styled("1-9", Style::default().fg(Color::Cyan)));
-        spans.push(Span::raw(" zoom  "));
+        spans.push(Span::raw(" select  "));
+        spans.push(Span::styled("Enter", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" switch  "));
+        spans.push(Span::styled("e", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" editor  "));
+        spans.push(Span::styled("t", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" terminal  "));
     }
 
     spans.push(Span::styled("/", Style::default().fg(Color::Cyan)));
