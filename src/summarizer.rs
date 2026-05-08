@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -87,44 +88,64 @@ pub struct Summarizer {
     tx: Option<Sender<Job>>,
     pub store: LabelStore,
     last_enqueued: Mutex<HashMap<String, u64>>,
-    enabled: bool,
+    enabled: Arc<AtomicBool>,
 }
 
 impl Summarizer {
+    /// Start the summarizer with backend probing deferred to a worker thread.
+    /// `enabled()` will return false until the probe completes; if the probe
+    /// finds no backend, it stays false forever.
     pub fn start() -> Self {
+        Self::start_inner(false)
+    }
+
+    /// Start the summarizer and block until backend selection finishes.
+    /// Used by daemon mode where we exit immediately if no backend is available.
+    pub fn start_blocking() -> Self {
+        Self::start_inner(true)
+    }
+
+    fn start_inner(blocking: bool) -> Self {
         let store = LabelStore::default();
         load_cache_into(&store);
 
-        let backend = match select_backend() {
-            Some(b) => b,
-            None => {
-                return Summarizer {
-                    tx: None,
-                    store,
-                    last_enqueued: Mutex::new(HashMap::new()),
-                    enabled: false,
-                };
-            }
-        };
-
+        let enabled = Arc::new(AtomicBool::new(false));
         let (tx, rx) = channel::<Job>();
-        let worker_store = store.clone();
-        thread::spawn(move || worker_loop(rx, worker_store, backend));
+
+        if blocking {
+            // Probe synchronously, then spawn worker only if a backend was found.
+            let backend = select_backend();
+            if let Some(backend) = backend {
+                enabled.store(true, Ordering::Release);
+                let worker_store = store.clone();
+                thread::spawn(move || worker_loop(rx, worker_store, backend));
+            }
+        } else {
+            let worker_store = store.clone();
+            let enabled_clone = enabled.clone();
+            thread::spawn(move || {
+                let backend = select_backend();
+                if let Some(backend) = backend {
+                    enabled_clone.store(true, Ordering::Release);
+                    worker_loop(rx, worker_store, backend);
+                }
+            });
+        }
 
         Summarizer {
             tx: Some(tx),
             store,
             last_enqueued: Mutex::new(HashMap::new()),
-            enabled: true,
+            enabled,
         }
     }
 
     pub fn enabled(&self) -> bool {
-        self.enabled
+        self.enabled.load(Ordering::Acquire)
     }
 
     pub fn maybe_enqueue(&self, session_id: &str, jsonl_path: &Path, file_size: u64) {
-        if !self.enabled || file_size == 0 {
+        if !self.enabled() || file_size == 0 {
             return;
         }
         let tx = match &self.tx {

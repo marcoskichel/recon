@@ -27,6 +27,14 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
+        Self::with_summarizer(Summarizer::start())
+    }
+
+    pub fn new_blocking() -> Self {
+        Self::with_summarizer(Summarizer::start_blocking())
+    }
+
+    fn with_summarizer(summarizer: Summarizer) -> Self {
         App {
             sessions: Vec::new(),
             selected: 0,
@@ -40,7 +48,7 @@ impl App {
             filter_cursor: 0,
             view_chars_per_row: Cell::new(1),
             view_room_order: Vec::new(),
-            summarizer: Summarizer::start(),
+            summarizer,
             prev_sessions: HashMap::new(),
         }
     }

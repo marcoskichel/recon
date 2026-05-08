@@ -580,15 +580,43 @@ fn git_project_info(cwd: &str) -> (String, Option<String>, Option<String>) {
         return (name, None, None);
     }
 
-    let (repo_name, relative_dir) = {
-        let mut cache = STABLE_GIT_CACHE.lock().unwrap();
-        let map = cache.get_or_insert_with(HashMap::new);
-        if let Some(info) = map.get(cwd) {
-            (info.repo_name.clone(), info.relative_dir.clone())
-        } else {
-            let repo_name = fetch_git_repo_name(cwd);
-            let relative_dir = fetch_relative_dir(cwd);
-            map.insert(
+    let stable_hit = STABLE_GIT_CACHE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|m| m.get(cwd))
+        .map(|i| (i.repo_name.clone(), i.relative_dir.clone()));
+
+    let branch_hit = BRANCH_CACHE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|m| m.get(cwd))
+        .filter(|i| i.fetched_at.elapsed() < BRANCH_CACHE_TTL)
+        .map(|i| i.branch.clone());
+
+    if let (Some((repo_name, relative_dir)), Some(branch)) = (stable_hit.clone(), branch_hit.clone()) {
+        return (repo_name, relative_dir, branch);
+    }
+
+    // At least one cache miss — do a single combined git rev-parse call.
+    let combined = fetch_combined_git_info(cwd);
+
+    let (repo_name, relative_dir) = match stable_hit {
+        Some(s) => s,
+        None => {
+            let repo_name = combined
+                .as_ref()
+                .and_then(|c| c.repo_name.clone())
+                .unwrap_or_else(|| {
+                    Path::new(cwd)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| cwd.to_string())
+                });
+            let relative_dir = combined.as_ref().and_then(|c| c.relative_dir.clone());
+            let mut cache = STABLE_GIT_CACHE.lock().unwrap();
+            cache.get_or_insert_with(HashMap::new).insert(
                 cwd.to_string(),
                 StableGitInfo {
                     repo_name: repo_name.clone(),
@@ -599,96 +627,74 @@ fn git_project_info(cwd: &str) -> (String, Option<String>, Option<String>) {
         }
     };
 
-    let branch = {
-        let mut cache = BRANCH_CACHE.lock().unwrap();
-        let map = cache.get_or_insert_with(HashMap::new);
-        match map.get(cwd) {
-            Some(info) if info.fetched_at.elapsed() < BRANCH_CACHE_TTL => info.branch.clone(),
-            _ => {
-                let branch = fetch_git_branch(cwd);
-                map.insert(
-                    cwd.to_string(),
-                    BranchInfo {
-                        branch: branch.clone(),
-                        fetched_at: Instant::now(),
-                    },
-                );
-                branch
-            }
+    let branch = match branch_hit {
+        Some(b) => b,
+        None => {
+            let branch = combined.as_ref().and_then(|c| c.branch.clone());
+            let mut cache = BRANCH_CACHE.lock().unwrap();
+            cache.get_or_insert_with(HashMap::new).insert(
+                cwd.to_string(),
+                BranchInfo {
+                    branch: branch.clone(),
+                    fetched_at: Instant::now(),
+                },
+            );
+            branch
         }
     };
 
     (repo_name, relative_dir, branch)
 }
 
-fn fetch_git_repo_name(cwd: &str) -> String {
-    // Use --git-common-dir to get a stable name across worktrees
-    fetch_canonical_repo_name(cwd).unwrap_or_else(|| {
-        Path::new(cwd)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| cwd.to_string())
-    })
+struct CombinedGitInfo {
+    repo_name: Option<String>,
+    relative_dir: Option<String>,
+    branch: Option<String>,
 }
 
-/// Get the canonical repo name from --git-common-dir (stable across worktrees).
-fn fetch_canonical_repo_name(cwd: &str) -> Option<String> {
+/// Single `git rev-parse` call returning toplevel, common-dir, and branch.
+/// Replaces three separate process spawns.
+fn fetch_combined_git_info(cwd: &str) -> Option<CombinedGitInfo> {
     let output = std::process::Command::new("git")
-        .args(["-C", cwd, "rev-parse", "--git-common-dir"])
+        .args([
+            "-C",
+            cwd,
+            "rev-parse",
+            "--show-toplevel",
+            "--git-common-dir",
+            "--abbrev-ref",
+            "HEAD",
+        ])
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    let common = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let common_path = if Path::new(&common).is_absolute() {
-        PathBuf::from(&common)
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    if lines.len() < 3 {
+        return None;
+    }
+    let toplevel = lines[0].trim();
+    let common_dir = lines[1].trim();
+    let branch_raw = lines[2].trim();
+
+    // Repo name from --git-common-dir (stable across worktrees).
+    let common_path = if Path::new(common_dir).is_absolute() {
+        PathBuf::from(common_dir)
     } else {
-        PathBuf::from(cwd).join(&common)
+        PathBuf::from(cwd).join(common_dir)
     };
     let repo_root = if common_path.file_name().map(|n| n == ".git").unwrap_or(false) {
-        common_path.parent()?.to_path_buf()
+        common_path.parent().map(|p| p.to_path_buf())
     } else {
-        common_path
+        Some(common_path)
     };
-    repo_root.file_name().map(|n| n.to_string_lossy().to_string())
-}
+    let repo_name = repo_root.and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
 
-fn fetch_git_branch(cwd: &str) -> Option<String> {
-    let output = std::process::Command::new("git")
-        .args(["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if branch.is_empty() || branch == "HEAD" {
-        None
-    } else {
-        Some(branch)
-    }
-}
-
-/// Compute the relative path from the git worktree root to the CWD.
-///
-/// Returns None if CWD is the worktree root (or not a git repo).
-///   /repos/line5              → None
-///   /repos/line5/tools/solo   → Some("tools/solo")
-fn fetch_relative_dir(cwd: &str) -> Option<String> {
-    let toplevel = match std::process::Command::new("git")
-        .args(["-C", cwd, "rev-parse", "--show-toplevel"])
-        .output()
-    {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
-        _ => return None,
-    };
-
-    // Try plain strip_prefix first (avoids canonicalize syscall — fewer TCC prompts).
-    // Fall back to canonicalize only when literal paths don't share a prefix
-    // (e.g. /tmp vs /private/tmp on macOS).
+    // Relative dir from cwd vs --show-toplevel.
     let cwd_path = Path::new(cwd);
-    let top_path = Path::new(&toplevel);
+    let top_path = Path::new(toplevel);
     let relative = cwd_path
         .strip_prefix(top_path)
         .map(Path::to_path_buf)
@@ -696,19 +702,29 @@ fn fetch_relative_dir(cwd: &str) -> Option<String> {
             let cwd_resolved = cwd_path.canonicalize().unwrap_or_else(|_| PathBuf::from(cwd));
             let top_resolved = top_path
                 .canonicalize()
-                .unwrap_or_else(|_| PathBuf::from(&toplevel));
-            cwd_resolved
-                .strip_prefix(&top_resolved)
-                .map(Path::to_path_buf)
+                .unwrap_or_else(|_| PathBuf::from(toplevel));
+            cwd_resolved.strip_prefix(&top_resolved).map(Path::to_path_buf)
         })
         .unwrap_or_default();
-
-    if relative.as_os_str().is_empty() || relative == Path::new(".") {
+    let relative_dir = if relative.as_os_str().is_empty() || relative == Path::new(".") {
         None
     } else {
         Some(relative.display().to_string())
-    }
+    };
+
+    let branch = if branch_raw.is_empty() || branch_raw == "HEAD" {
+        None
+    } else {
+        Some(branch_raw.to_string())
+    };
+
+    Some(CombinedGitInfo {
+        repo_name,
+        relative_dir,
+        branch,
+    })
 }
+
 
 /// Decode an encoded project directory name back to a path.
 /// `-Users-gavra-repos-yaba` -> `/Users/gavra/repos/yaba`
@@ -1236,6 +1252,9 @@ fn read_pid_session_map() -> HashMap<i32, SessionFileInfo> {
 
 /// Get tmux panes running claude.
 /// Returns Vec<(pid, session_name, pane_cwd)>.
+///
+/// Performance: builds a single ppid→children map from one `ps -eo pid,ppid`
+/// call, avoiding per-pane `pgrep` spawns. Also enumerates session files once.
 fn discover_claude_tmux_panes() -> Vec<(i32, String, String, String)> {
     let output = match std::process::Command::new("tmux")
         .args([
@@ -1252,9 +1271,9 @@ fn discover_claude_tmux_panes() -> Vec<(i32, String, String, String)> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut results = Vec::new();
-    let sessions_dir = dirs::home_dir()
-        .map(|h| h.join(".claude").join("sessions"))
-        .unwrap_or_default();
+
+    let session_pids = read_session_pids();
+    let children_map = ProcessChildren::load();
 
     for line in stdout.lines() {
         let parts: Vec<&str> = line.splitn(6, "|||").collect();
@@ -1289,17 +1308,17 @@ fn discover_claude_tmux_panes() -> Vec<(i32, String, String, String)> {
             // pane_pid is the initial process — it may be claude itself (recon launch)
             // or a shell with claude as the foreground child (manual `claude` in a terminal).
             // Try the pane PID first, fall back to searching children.
-            let claude_pid = if sessions_dir.join(format!("{pid}.json")).exists() {
+            let claude_pid = if session_pids.contains(&pid) {
                 Some(pid)
             } else {
-                find_claude_child_pid(pid)
+                children_map.find_descendant_in(pid, &session_pids)
             };
             if let Some(cpid) = claude_pid {
                 let pane_target = format!("{session_name}:{window_index}.{pane_index}");
                 results.push((cpid, session_name.to_string(), pane_target, pane_path.to_string()));
             }
         } else if command == "bash" || command == "sh" || command == "zsh" {
-            if let Some(claude_pid) = find_claude_child_pid(pid) {
+            if let Some(claude_pid) = children_map.find_descendant_in(pid, &session_pids) {
                 let pane_target = format!("{session_name}:{window_index}.{pane_index}");
                 results.push((claude_pid, session_name.to_string(), pane_target, pane_path.to_string()));
             }
@@ -1309,18 +1328,77 @@ fn discover_claude_tmux_panes() -> Vec<(i32, String, String, String)> {
     results
 }
 
-/// Check if a shell process has a claude child by looking for a child PID
-/// that has a corresponding ~/.claude/sessions/{PID}.json file.
-fn find_claude_child_pid(parent_pid: i32) -> Option<i32> {
-    let sessions_dir = dirs::home_dir()?.join(".claude").join("sessions");
-    let output = std::process::Command::new("pgrep")
-        .args(["-P", &parent_pid.to_string()])
-        .output()
-        .ok()?;
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|l| l.trim().parse::<i32>().ok())
-        .find(|pid| sessions_dir.join(format!("{pid}.json")).exists())
+/// Enumerate PIDs that have a `~/.claude/sessions/{PID}.json` file.
+fn read_session_pids() -> std::collections::HashSet<i32> {
+    let sessions_dir = match dirs::home_dir() {
+        Some(h) => h.join(".claude").join("sessions"),
+        None => return std::collections::HashSet::new(),
+    };
+    let entries = match fs::read_dir(&sessions_dir) {
+        Ok(e) => e,
+        Err(_) => return std::collections::HashSet::new(),
+    };
+    entries
+        .flatten()
+        .filter_map(|e| {
+            let path = e.path();
+            if path.extension().map(|x| x == "json").unwrap_or(false) {
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| s.parse::<i32>().ok())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Process tree built from a single `ps` call.
+struct ProcessChildren {
+    map: HashMap<i32, Vec<i32>>,
+}
+
+impl ProcessChildren {
+    fn load() -> Self {
+        let output = match std::process::Command::new("ps")
+            .args(["-eo", "pid=,ppid="])
+            .output()
+        {
+            Ok(o) if o.status.success() => o,
+            _ => return ProcessChildren { map: HashMap::new() },
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut map: HashMap<i32, Vec<i32>> = HashMap::new();
+        for line in stdout.lines() {
+            let mut parts = line.split_whitespace();
+            let pid: Option<i32> = parts.next().and_then(|s| s.parse().ok());
+            let ppid: Option<i32> = parts.next().and_then(|s| s.parse().ok());
+            if let (Some(pid), Some(ppid)) = (pid, ppid) {
+                map.entry(ppid).or_default().push(pid);
+            }
+        }
+        ProcessChildren { map }
+    }
+
+    /// BFS from `parent` looking for any descendant whose PID is in `target_set`.
+    fn find_descendant_in(&self, parent: i32, target_set: &std::collections::HashSet<i32>) -> Option<i32> {
+        let mut stack = vec![parent];
+        let mut seen = std::collections::HashSet::new();
+        while let Some(pid) = stack.pop() {
+            if !seen.insert(pid) {
+                continue;
+            }
+            if let Some(children) = self.map.get(&pid) {
+                for &child in children {
+                    if target_set.contains(&child) {
+                        return Some(child);
+                    }
+                    stack.push(child);
+                }
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]

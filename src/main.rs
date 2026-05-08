@@ -39,7 +39,7 @@ fn main() -> io::Result<()> {
 }
 
 fn run_daemon(interval_secs: u64) {
-    let mut app = App::new();
+    let mut app = App::new_blocking();
     if !app.summarizer.enabled() {
         eprintln!("recon daemon: summarizer disabled (no Ollama and no ANTHROPIC_API_KEY).");
         std::process::exit(1);
@@ -88,7 +88,6 @@ fn run_tui() -> io::Result<()> {
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
     let mut app = App::new();
-    app.refresh();
 
     let (tx, rx) = mpsc::channel::<Vec<Session>>();
     let initial_prev = app.snapshot_prev();
@@ -127,8 +126,12 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
 fn run_refresh_worker(tx: mpsc::Sender<Vec<Session>>, initial_prev: HashMap<String, Session>) {
     let interval = Duration::from_secs(2);
     let mut prev = initial_prev;
+    let mut first = true;
     loop {
-        thread::sleep(interval);
+        if !first {
+            thread::sleep(interval);
+        }
+        first = false;
         let sessions: Vec<Session> = session::discover_sessions(&prev)
             .into_iter()
             .filter(|s| s.tmux_session.is_some())
