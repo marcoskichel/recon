@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Padding, Paragraph},
+    widgets::{Block, BorderType, Borders, Padding, Paragraph},
 };
 
 use crate::app::App;
@@ -20,6 +20,11 @@ const CHAR_WIDTH: u16 = (SPRITE_W as u16) + 30; // sprite + padding (wider for l
 const NAME_LINES: u16 = 3; // wrap label across this many lines
 const CHAR_LABEL_LINES: u16 = NAME_LINES + 2; // name(NAME_LINES) + branch + context bar
 const CHAR_HEIGHT: u16 = SPRITE_RENDER_H + CHAR_LABEL_LINES;
+
+// Compact horizontal card: sprite left, info right, rounded border.
+const COMPACT_CARD_WIDTH: u16 = 46;
+const COMPACT_CARD_HEIGHT: u16 = 9;
+const COMPACT_SPRITE_COLS: u16 = 12; // sprite (10) + 1 col gutter each side
 
 // ── Pixel sprite data ────────────────────────────────────────────────
 // Each sprite is SPRITE_H rows x SPRITE_W cols. 0 = transparent.
@@ -298,6 +303,38 @@ pub(crate) fn group_into_rooms(sessions: &[Session], indices: &[usize]) -> Vec<R
     rooms
 }
 
+pub(crate) fn group_into_rooms_stable(
+    sessions: &[Session],
+    indices: &[usize],
+    order: &[String],
+) -> Vec<Room> {
+    let rooms = group_into_rooms(sessions, indices);
+    let mut by_name: std::collections::HashMap<String, Room> =
+        rooms.into_iter().map(|r| (r.name.clone(), r)).collect();
+    let mut out = Vec::with_capacity(by_name.len());
+    for name in order {
+        if let Some(r) = by_name.remove(name) {
+            out.push(r);
+        }
+    }
+    let mut leftover: Vec<Room> = by_name.into_values().collect();
+    leftover.sort_by(|a, b| a.name.cmp(&b.name));
+    out.extend(leftover);
+    out
+}
+
+pub fn update_room_order(app: &mut App) {
+    let filtered = app.filtered_indices();
+    let rooms = group_into_rooms(&app.sessions, &filtered);
+    let known: std::collections::HashSet<String> =
+        app.view_room_order.iter().cloned().collect();
+    for r in &rooms {
+        if !known.contains(&r.name) {
+            app.view_room_order.push(r.name.clone());
+        }
+    }
+}
+
 // ── Animation ────────────────────────────────────────────────────────
 
 fn animation_frame(status: &SessionStatus, tick: u64) -> usize {
@@ -350,8 +387,9 @@ fn context_bar(ratio: f64) -> (String, Color) {
 // ── Public render entry point ────────────────────────────────────────
 
 pub fn resolve_zoom(app: &mut App) {
+    update_room_order(app);
     let filtered = app.filtered_indices();
-    let rooms = group_into_rooms(&app.sessions, &filtered);
+    let rooms = group_into_rooms_stable(&app.sessions, &filtered, &app.view_room_order);
     let total_pages = (rooms.len() + ROOMS_PER_PAGE - 1) / ROOMS_PER_PAGE;
     if total_pages > 0 {
         app.view_page = app.view_page.min(total_pages - 1);
@@ -435,7 +473,7 @@ fn render_search_bar(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
-    let rooms = group_into_rooms(&app.sessions, &app.filtered_indices());
+    let rooms = group_into_rooms_stable(&app.sessions, &app.filtered_indices(), &app.view_room_order);
 
     if rooms.is_empty() {
         render_empty(frame, area, app.tick);
@@ -444,7 +482,7 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
 
     if let Some(ref zoomed_name) = app.view_zoomed_room {
         if let Some(room) = rooms.iter().find(|r| &r.name == zoomed_name) {
-            render_room(frame, app, room, area, None, Some(app.view_selected_agent), None);
+            render_room(frame, app, room, area, None, Some(app.view_selected_agent), None, false);
             return;
         }
     }
@@ -473,7 +511,7 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
 
     for (i, cell) in cells.iter().enumerate() {
         if let Some(room) = page_rooms.get(i) {
-            render_room(frame, app, room, *cell, Some(i + 1), None, None);
+            render_room(frame, app, room, *cell, Some(i + 1), None, None, false);
         } else {
             let block = Block::default()
                 .borders(Borders::ALL)
@@ -514,7 +552,7 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
     const ROOM_GAP: u16 = 1;
     const ROOM_BORDER_OVERHEAD: u16 = 2; // top + bottom border
     let inner_width = area.width.saturating_sub(2); // borders consume 2 cols
-    let chars_per_row = (inner_width / CHAR_WIDTH).max(1) as usize;
+    let chars_per_row = (inner_width / COMPACT_CARD_WIDTH).max(1) as usize;
     app.view_chars_per_row.set(chars_per_row);
 
     let mut constraints: Vec<Constraint> = Vec::new();
@@ -524,7 +562,7 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
     for (idx, room) in rooms.iter().enumerate() {
         let n = room.session_indices.len().max(1);
         let rows = ((n + chars_per_row - 1) / chars_per_row) as u16;
-        let needed = rows * CHAR_HEIGHT + ROOM_BORDER_OVERHEAD;
+        let needed = rows * COMPACT_CARD_HEIGHT + ROOM_BORDER_OVERHEAD;
         let gap = if idx == 0 { 0 } else { ROOM_GAP };
         if used.saturating_add(needed).saturating_add(gap) > area.height {
             break;
@@ -539,7 +577,7 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
 
     if visible_rooms.is_empty() {
         // Fall back to letting the first room consume what it can.
-        render_room(frame, app, &rooms[0], area, None, None, Some(0));
+        render_room(frame, app, &rooms[0], area, None, None, Some(0), true);
         return;
     }
 
@@ -592,7 +630,7 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
         } else {
             None
         };
-        render_room(frame, app, room, chunks[chunk_idx], slot, sel, agent_label_offset);
+        render_room(frame, app, room, chunks[chunk_idx], slot, sel, agent_label_offset, true);
         chunk_idx += 1;
     }
 }
@@ -605,6 +643,7 @@ fn render_room(
     slot_num: Option<usize>,
     selected_agent: Option<usize>,
     agent_label_offset: Option<usize>,
+    compact: bool,
 ) {
     let border_color = if room.has_input {
         if app.tick % 2 == 0 { Color::Yellow } else { Color::White }
@@ -635,10 +674,13 @@ fn render_room(
         return;
     }
 
-    let chars_per_row = (inner.width / CHAR_WIDTH).max(1) as usize;
+    let card_width = if compact { COMPACT_CARD_WIDTH } else { CHAR_WIDTH };
+    let card_height = if compact { COMPACT_CARD_HEIGHT } else { CHAR_HEIGHT };
+
+    let chars_per_row = (inner.width / card_width).max(1) as usize;
     let char_rows: Vec<&[usize]> = room.session_indices.chunks(chars_per_row).collect();
 
-    let needed_height = char_rows.len() as u16 * CHAR_HEIGHT;
+    let needed_height = char_rows.len() as u16 * card_height;
     let v_pad = inner.height.saturating_sub(needed_height) / 2;
     let char_area = Rect {
         x: inner.x,
@@ -649,7 +691,7 @@ fn render_room(
 
     let row_constraints: Vec<Constraint> = char_rows
         .iter()
-        .map(|_| Constraint::Length(CHAR_HEIGHT))
+        .map(|_| Constraint::Length(card_height))
         .collect();
     let v_chunks = Layout::vertical(row_constraints).split(char_area);
 
@@ -659,7 +701,7 @@ fn render_room(
         }
         let col_constraints: Vec<Constraint> = indices
             .iter()
-            .map(|_| Constraint::Length(CHAR_WIDTH))
+            .map(|_| Constraint::Length(card_width))
             .collect();
         let h_chunks = Layout::horizontal(col_constraints).split(v_chunks[row_idx]);
 
@@ -673,15 +715,27 @@ fn render_room(
                 let g = base + flat_idx;
                 if g < 9 { Some(g + 1) } else { None }
             });
-            render_character(
-                frame,
-                app,
-                &app.sessions[session_idx],
-                h_chunks[col_idx],
-                app.tick,
-                is_selected,
-                agent_label,
-            );
+            if compact {
+                render_character_compact(
+                    frame,
+                    app,
+                    &app.sessions[session_idx],
+                    h_chunks[col_idx],
+                    app.tick,
+                    is_selected,
+                    agent_label,
+                );
+            } else {
+                render_character(
+                    frame,
+                    app,
+                    &app.sessions[session_idx],
+                    h_chunks[col_idx],
+                    app.tick,
+                    is_selected,
+                    agent_label,
+                );
+            }
         }
     }
 }
@@ -777,6 +831,176 @@ fn render_character(
     }
 }
 
+fn elapsed_hms(started_at: u64) -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let elapsed = now.saturating_sub(started_at);
+    let h = elapsed / 3600;
+    let m = (elapsed % 3600) / 60;
+    let s = elapsed % 60;
+    format!("{:02}:{:02}:{:02}", h, m, s)
+}
+
+fn wide_context_bar(ratio: f64, total_width: usize) -> (Vec<Span<'static>>, Color) {
+    let pct = (ratio * 100.0) as u32;
+    let pct_str = format!(" {}%", pct);
+    let pct_len = pct_str.chars().count();
+    let bar_width = total_width.saturating_sub(pct_len + 1).max(1);
+    let filled = (ratio * bar_width as f64).round().min(bar_width as f64) as usize;
+    let empty = bar_width.saturating_sub(filled);
+    let color = if ratio > 0.75 {
+        Color::Red
+    } else if ratio > 0.40 {
+        Color::Yellow
+    } else {
+        Color::Green
+    };
+    let dim = Color::Rgb(60, 60, 60);
+    let spans = vec![
+        Span::styled(
+            "\u{2588}".repeat(filled),
+            Style::default().fg(color),
+        ),
+        Span::styled(
+            "\u{2588}".repeat(empty),
+            Style::default().fg(dim),
+        ),
+        Span::styled(pct_str, Style::default().fg(color).add_modifier(Modifier::BOLD)),
+    ];
+    (spans, color)
+}
+
+fn render_character_compact(
+    frame: &mut Frame,
+    app: &App,
+    session: &Session,
+    area: Rect,
+    tick: u64,
+    is_selected: bool,
+    agent_label: Option<usize>,
+) {
+    if area.height < 4 || area.width < (COMPACT_SPRITE_COLS + 6) {
+        return;
+    }
+
+    let status_color = status_color(&session.status);
+    let border_color = if is_selected { Color::Cyan } else { Color::Rgb(60, 60, 70) };
+
+    let card = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border_color))
+        .padding(Padding::horizontal(1));
+    let inner = card.inner(area);
+    frame.render_widget(card, area);
+
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+
+    // Split: sprite | text
+    let sprite_w = COMPACT_SPRITE_COLS.min(inner.width.saturating_sub(4));
+    let chunks = Layout::horizontal([
+        Constraint::Length(sprite_w),
+        Constraint::Min(1),
+    ])
+    .split(inner);
+
+    // Sprite area — vertically center the 5-row sprite within the inner height.
+    let sprite_area = chunks[0];
+    let offset = session_phase_offset(&session.session_id);
+    let anim_frame = animation_frame(&session.status, tick + offset);
+    let (sprite, palette) = sprite_data(&session.status, anim_frame);
+    let sprite_lines = render_sprite_lines(sprite, palette);
+    let sprite_pad = sprite_area.height.saturating_sub(SPRITE_RENDER_H) / 2;
+    let sprite_rect = Rect {
+        x: sprite_area.x,
+        y: sprite_area.y + sprite_pad,
+        width: sprite_area.width,
+        height: SPRITE_RENDER_H.min(sprite_area.height),
+    };
+    frame.render_widget(
+        Paragraph::new(sprite_lines).alignment(Alignment::Left),
+        sprite_rect,
+    );
+
+    // Text area
+    let text_area = chunks[1];
+    let text_w = text_area.width as usize;
+
+    // Label priority: LLM summary > last user prompt > tmux session name
+    let summary_owned = app
+        .summarizer
+        .store
+        .get(&session.session_id)
+        .map(|s: String| sanitize_prompt(s.as_str()))
+        .filter(|s| !s.is_empty());
+    let prompt_owned = session
+        .last_user_prompt
+        .as_deref()
+        .map(sanitize_prompt)
+        .filter(|s| !s.is_empty());
+    let name = summary_owned
+        .as_deref()
+        .or(prompt_owned.as_deref())
+        .or(session.tmux_session.as_deref())
+        .unwrap_or("???");
+    let name_style = Style::default()
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD);
+    let name_lines = wrap_label(name, text_w, 2);
+
+    let branch = session.branch.as_deref().unwrap_or("");
+    let timer = elapsed_hms(session.started_at);
+    let status_label = session.status.label();
+
+    let mut lines: Vec<Line> = Vec::new();
+    for line in name_lines.iter().take(2) {
+        lines.push(Line::from(Span::styled(line.clone(), name_style)));
+    }
+    while lines.len() < 2 {
+        lines.push(Line::from(""));
+    }
+    lines.push(Line::from(Span::styled(
+        truncate_str(branch, text_w),
+        Style::default().fg(Color::Green),
+    )));
+    lines.push(Line::from(vec![
+        Span::styled("\u{25CF} ", Style::default().fg(status_color)),
+        Span::styled(
+            status_label.to_string(),
+            Style::default().fg(Color::White),
+        ),
+        Span::raw("   "),
+        Span::styled("\u{29D6} ", Style::default().fg(Color::DarkGray)),
+        Span::styled(timer, Style::default().fg(Color::Gray)),
+    ]));
+    let (bar_spans, _bar_color) = wide_context_bar(session.token_ratio(), text_w);
+    lines.push(Line::from(bar_spans));
+
+    frame.render_widget(Paragraph::new(lines), text_area);
+
+    if let Some(n) = agent_label {
+        let label = format!("[{}]", n);
+        let label_w = (label.chars().count() as u16).min(area.width);
+        if label_w > 0 {
+            let label_rect = Rect {
+                x: area.x + 1,
+                y: area.y,
+                width: label_w,
+                height: 1,
+            };
+            let style = Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD);
+            frame.render_widget(Paragraph::new(label).style(style), label_rect);
+        }
+    }
+}
+
 fn render_empty(frame: &mut Frame, area: Rect, _tick: u64) {
     let (sprite, palette) = sprite_data(&SessionStatus::Idle, 0);
     let mut lines: Vec<Line> = Vec::new();
@@ -793,7 +1017,7 @@ fn render_empty(frame: &mut Frame, area: Rect, _tick: u64) {
 }
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let rooms = group_into_rooms(&app.sessions, &app.filtered_indices());
+    let rooms = group_into_rooms_stable(&app.sessions, &app.filtered_indices(), &app.view_room_order);
     let total_pages = (rooms.len() + ROOMS_PER_PAGE - 1) / ROOMS_PER_PAGE;
     let page = app.view_page.min(total_pages.saturating_sub(1));
 

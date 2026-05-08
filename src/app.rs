@@ -29,6 +29,7 @@ pub struct App {
     pub filter_cursor: usize,             // cursor position in query
     pub view_compact: bool,               // single-room compact layout
     pub view_chars_per_row: Cell<usize>,  // cached from last render, used for grid nav
+    pub view_room_order: Vec<String>,     // sticky room order; new rooms append at end
     pub summarizer: Summarizer,
     prev_sessions: HashMap<String, Session>,
 }
@@ -50,6 +51,7 @@ impl App {
             filter_cursor: 0,
             view_compact: false,
             view_chars_per_row: Cell::new(1),
+            view_room_order: Vec::new(),
             summarizer: Summarizer::start(),
             prev_sessions: HashMap::new(),
         }
@@ -502,7 +504,7 @@ impl App {
 
     fn compact_flat_session_indices(&self) -> Vec<usize> {
         let filtered = self.filtered_indices();
-        let rooms = view_ui::group_into_rooms(&self.sessions, &filtered);
+        let rooms = view_ui::group_into_rooms_stable(&self.sessions, &filtered, &self.view_room_order);
         rooms
             .into_iter()
             .flat_map(|r| r.session_indices.into_iter())
@@ -525,7 +527,7 @@ impl App {
     // Grid layout helper: returns Vec<(session_count, rows, base_global_idx)> per room.
     fn compact_room_layouts(&self, cpr: usize) -> (Vec<(usize, usize, usize)>, usize) {
         let filtered = self.filtered_indices();
-        let rooms = view_ui::group_into_rooms(&self.sessions, &filtered);
+        let rooms = view_ui::group_into_rooms_stable(&self.sessions, &filtered, &self.view_room_order);
         let mut out = Vec::with_capacity(rooms.len());
         let mut base = 0usize;
         for r in &rooms {
