@@ -740,17 +740,24 @@ fn render_character(
         Style::default().fg(Color::White)
     };
     let name_lines = wrap_label(name, area.width as usize, NAME_LINES as usize);
-    for i in 0..(NAME_LINES as usize) {
-        let text = name_lines.get(i).cloned().unwrap_or_default();
-        lines.push(Line::from(Span::styled(text, name_style)));
+    let real_name_lines = name_lines.len().min(NAME_LINES as usize);
+    for line in name_lines.iter().take(NAME_LINES as usize) {
+        lines.push(Line::from(Span::styled(line.clone(), name_style)));
     }
 
-    // Git branch
+    // Git branch (no padding above — sits right under the name).
     let branch = session.branch.as_deref().unwrap_or("");
     lines.push(Line::from(Span::styled(
         truncate_str(branch, area.width as usize),
         Style::default().fg(Color::Green),
     )));
+
+    // Padding below branch absorbs whatever name lines were unused so the
+    // overall char cell height stays CHAR_HEIGHT.
+    let slack = (NAME_LINES as usize).saturating_sub(real_name_lines);
+    for _ in 0..slack {
+        lines.push(Line::from(""));
+    }
 
     // Context bar
     let (bar_str, bar_color) = context_bar(ratio);
