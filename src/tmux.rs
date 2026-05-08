@@ -69,40 +69,6 @@ pub fn create_session(name: &str, cwd: &str, command: Option<&str>, tags: &[Stri
     Ok(session_name)
 }
 
-/// Launch a shell command (with pipes, redirects, etc.) in a new tmux session.
-/// Wraps the command in `sh -c` so shell features work.
-pub fn create_session_shell(name: &str, cwd: &str, shell_cmd: &str) -> Result<String, String> {
-    if !session::validate_cwd(cwd) {
-        return Err(format!("Invalid working directory: {cwd}"));
-    }
-
-    let base_name = sanitize_session_name(name);
-    let session_name = unique_session_name(&base_name);
-
-    let tmux_args = vec![
-        "new-session".to_string(),
-        "-d".to_string(),
-        "-s".to_string(),
-        session_name.clone(),
-        "-c".to_string(),
-        cwd.to_string(),
-        "sh".to_string(),
-        "-c".to_string(),
-        shell_cmd.to_string(),
-    ];
-
-    let status = Command::new("tmux")
-        .args(&tmux_args)
-        .status()
-        .map_err(|e| format!("Failed to create tmux session: {e}"))?;
-
-    if !status.success() {
-        return Err("tmux new-session failed".to_string());
-    }
-
-    Ok(session_name)
-}
-
 fn unique_session_name(base_name: &str) -> String {
     if !session_exists(base_name) {
         return base_name.to_string();
