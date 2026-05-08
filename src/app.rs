@@ -267,6 +267,12 @@ impl App {
                         let idx = (c as usize) - ('1' as usize);
                         if idx < total {
                             self.view_selected_agent = idx;
+                            if let Some(session) = self.selected_compact_session() {
+                                if let Some(target) = session.pane_target.clone() {
+                                    tmux::switch_to_pane(&target);
+                                    self.should_quit = true;
+                                }
+                            }
                         }
                         return;
                     }
