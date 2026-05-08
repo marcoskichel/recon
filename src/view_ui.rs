@@ -751,8 +751,10 @@ fn render_character(
         Style::default().fg(Color::Green),
     )));
 
-    // Context bar sits directly under the branch; any unused vertical slack
-    // falls below it as natural cell padding.
+    // One blank line of breathing room between branch and context bar.
+    lines.push(Line::from(""));
+
+    // Context bar
     let (bar_str, bar_color) = context_bar(ratio);
     lines.push(Line::from(Span::styled(
         truncate_str(&bar_str, area.width as usize),
