@@ -66,6 +66,10 @@ impl App {
             .map(|s| (s.session_id.clone(), s.clone()))
             .collect();
 
+        self.apply_snapshot(sessions);
+    }
+
+    pub fn apply_snapshot(&mut self, sessions: Vec<Session>) {
         for s in &sessions {
             if !s.jsonl_path.as_os_str().is_empty() {
                 self.summarizer
@@ -81,6 +85,13 @@ impl App {
         } else if self.selected >= count {
             self.selected = count - 1;
         }
+    }
+
+    pub fn snapshot_prev(&self) -> HashMap<String, Session> {
+        self.sessions
+            .iter()
+            .map(|s| (s.session_id.clone(), s.clone()))
+            .collect()
     }
 
     pub fn advance_tick(&mut self) {
