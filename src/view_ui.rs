@@ -444,7 +444,7 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
 
     if let Some(ref zoomed_name) = app.view_zoomed_room {
         if let Some(room) = rooms.iter().find(|r| &r.name == zoomed_name) {
-            render_room(frame, app, room, area, None, Some(app.view_selected_agent));
+            render_room(frame, app, room, area, None, Some(app.view_selected_agent), None);
             return;
         }
     }
@@ -473,7 +473,7 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
 
     for (i, cell) in cells.iter().enumerate() {
         if let Some(room) = page_rooms.get(i) {
-            render_room(frame, app, room, *cell, Some(i + 1), None);
+            render_room(frame, app, room, *cell, Some(i + 1), None, None);
         } else {
             let block = Block::default()
                 .borders(Borders::ALL)
@@ -539,9 +539,19 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
 
     if visible_rooms.is_empty() {
         // Fall back to letting the first room consume what it can.
-        render_room(frame, app, &rooms[0], area, Some(1), None);
+        render_room(frame, app, &rooms[0], area, None, None, Some(0));
         return;
     }
+
+    // Prefix sum of session counts so each visible room knows its global flat-index base.
+    let prefix_sums: Vec<usize> = rooms
+        .iter()
+        .scan(0usize, |acc, r| {
+            let v = *acc;
+            *acc += r.session_indices.len();
+            Some(v)
+        })
+        .collect();
 
     // Pad remaining vertical space so rooms don't stretch.
     if used < area.height {
@@ -558,7 +568,6 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
         if chunk_idx >= chunks.len() {
             break;
         }
-        let slot = if i < ROOMS_PER_PAGE { Some(i + 1) } else { None };
         // Find this room's index in the original rooms slice to match selection.
         let room_idx = rooms
             .iter()
@@ -569,12 +578,34 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
         } else {
             None
         };
-        render_room(frame, app, room, chunks[chunk_idx], slot, sel);
+        let offset = prefix_sums.get(room_idx).copied().unwrap_or(0);
+        // In compact (non-zoomed) mode, digits select agents, not rooms — drop room slot label.
+        let slot = if app.view_compact && app.view_zoomed_room.is_none() {
+            None
+        } else if i < ROOMS_PER_PAGE {
+            Some(i + 1)
+        } else {
+            None
+        };
+        let agent_label_offset = if app.view_compact && app.view_zoomed_room.is_none() {
+            Some(offset)
+        } else {
+            None
+        };
+        render_room(frame, app, room, chunks[chunk_idx], slot, sel, agent_label_offset);
         chunk_idx += 1;
     }
 }
 
-fn render_room(frame: &mut Frame, app: &App, room: &Room, area: Rect, slot_num: Option<usize>, selected_agent: Option<usize>) {
+fn render_room(
+    frame: &mut Frame,
+    app: &App,
+    room: &Room,
+    area: Rect,
+    slot_num: Option<usize>,
+    selected_agent: Option<usize>,
+    agent_label_offset: Option<usize>,
+) {
     let border_color = if room.has_input {
         if app.tick % 2 == 0 { Color::Yellow } else { Color::White }
     } else {
@@ -638,12 +669,32 @@ fn render_room(frame: &mut Frame, app: &App, room: &Room, area: Rect, slot_num: 
             }
             let flat_idx = row_idx * chars_per_row + col_idx;
             let is_selected = selected_agent == Some(flat_idx);
-            render_character(frame, app, &app.sessions[session_idx], h_chunks[col_idx], app.tick, is_selected);
+            let agent_label = agent_label_offset.and_then(|base| {
+                let g = base + flat_idx;
+                if g < 9 { Some(g + 1) } else { None }
+            });
+            render_character(
+                frame,
+                app,
+                &app.sessions[session_idx],
+                h_chunks[col_idx],
+                app.tick,
+                is_selected,
+                agent_label,
+            );
         }
     }
 }
 
-fn render_character(frame: &mut Frame, app: &App, session: &Session, area: Rect, tick: u64, is_selected: bool) {
+fn render_character(
+    frame: &mut Frame,
+    app: &App,
+    session: &Session,
+    area: Rect,
+    tick: u64,
+    is_selected: bool,
+    agent_label: Option<usize>,
+) {
     if area.height < 3 || area.width < 4 {
         return;
     }
@@ -710,6 +761,18 @@ fn render_character(frame: &mut Frame, app: &App, session: &Session, area: Rect,
 
     let paragraph = Paragraph::new(lines).alignment(Alignment::Center);
     frame.render_widget(paragraph, area);
+
+    if let Some(n) = agent_label {
+        let label = format!("[{}]", n);
+        let label_w = (label.chars().count() as u16).min(area.width);
+        if label_w > 0 {
+            let label_rect = Rect { x: area.x, y: area.y, width: label_w, height: 1 };
+            let style = Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD);
+            frame.render_widget(Paragraph::new(label).style(style), label_rect);
+        }
+    }
 }
 
 fn render_empty(frame: &mut Frame, area: Rect, _tick: u64) {

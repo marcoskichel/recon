@@ -263,7 +263,14 @@ impl App {
                         }
                         return;
                     }
-                    _ => {} // fall through to shared keys (q, /, v, 1-9)
+                    KeyCode::Char(c @ '1'..='9') => {
+                        let idx = (c as usize) - ('1' as usize);
+                        if idx < total {
+                            self.view_selected_agent = idx;
+                        }
+                        return;
+                    }
+                    _ => {} // fall through to shared keys (q, /, v)
                 }
             }
         }
