@@ -249,14 +249,14 @@ fn render_sprite_lines(sprite: &Sprite, palette: Palette) -> Vec<Line<'static>> 
 
 // ── Room grouping ────────────────────────────────────────────────────
 
-struct Room {
-    name: String,
-    session_indices: Vec<usize>,
-    has_input: bool,
-    last_activity: Option<String>,
+pub(crate) struct Room {
+    pub name: String,
+    pub session_indices: Vec<usize>,
+    pub has_input: bool,
+    pub last_activity: Option<String>,
 }
 
-fn group_into_rooms(sessions: &[Session], indices: &[usize]) -> Vec<Room> {
+pub(crate) fn group_into_rooms(sessions: &[Session], indices: &[usize]) -> Vec<Room> {
     let mut map: BTreeMap<String, Vec<usize>> = BTreeMap::new();
 
     for &i in indices {
@@ -380,6 +380,14 @@ pub fn resolve_zoom(app: &mut App) {
                 app.view_selected_agent = 0;
             }
         }
+    } else if app.view_compact {
+        // Compact non-zoomed: clamp to total session count across rooms.
+        let total: usize = rooms.iter().map(|r| r.session_indices.len()).sum();
+        if total > 0 {
+            app.view_selected_agent = app.view_selected_agent.min(total - 1);
+        } else {
+            app.view_selected_agent = 0;
+        }
     }
 }
 
@@ -480,10 +488,34 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
         return;
     }
 
+    // Map global selection index to (room_idx, local_idx).
+    let (selected_room_idx, selected_local_idx) = {
+        let mut acc = 0usize;
+        let total: usize = rooms.iter().map(|r| r.session_indices.len()).sum();
+        if total == 0 {
+            (None, 0)
+        } else {
+            let g = app.view_selected_agent.min(total - 1);
+            let mut found: Option<usize> = None;
+            let mut local = 0usize;
+            for (i, r) in rooms.iter().enumerate() {
+                let n = r.session_indices.len();
+                if g < acc + n {
+                    found = Some(i);
+                    local = g - acc;
+                    break;
+                }
+                acc += n;
+            }
+            (found, local)
+        }
+    };
+
     const ROOM_GAP: u16 = 1;
     const ROOM_BORDER_OVERHEAD: u16 = 2; // top + bottom border
     let inner_width = area.width.saturating_sub(2); // borders consume 2 cols
     let chars_per_row = (inner_width / CHAR_WIDTH).max(1) as usize;
+    app.view_chars_per_row.set(chars_per_row);
 
     let mut constraints: Vec<Constraint> = Vec::new();
     let mut visible_rooms: Vec<&Room> = Vec::new();
@@ -527,7 +559,17 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
             break;
         }
         let slot = if i < ROOMS_PER_PAGE { Some(i + 1) } else { None };
-        render_room(frame, app, room, chunks[chunk_idx], slot, None);
+        // Find this room's index in the original rooms slice to match selection.
+        let room_idx = rooms
+            .iter()
+            .position(|r| r.name == room.name)
+            .unwrap_or(usize::MAX);
+        let sel = if Some(room_idx) == selected_room_idx {
+            Some(selected_local_idx)
+        } else {
+            None
+        };
+        render_room(frame, app, room, chunks[chunk_idx], slot, sel);
         chunk_idx += 1;
     }
 }

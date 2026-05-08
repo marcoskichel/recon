@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -5,6 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::session::{self, Session};
 use crate::summarizer::Summarizer;
 use crate::tmux;
+use crate::view_ui;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ViewMode {
@@ -26,6 +28,7 @@ pub struct App {
     pub filter_text: String,              // current search query
     pub filter_cursor: usize,             // cursor position in query
     pub view_compact: bool,               // single-room compact layout
+    pub view_chars_per_row: Cell<usize>,  // cached from last render, used for grid nav
     pub summarizer: Summarizer,
     prev_sessions: HashMap<String, Session>,
 }
@@ -46,6 +49,7 @@ impl App {
             filter_text: String::new(),
             filter_cursor: 0,
             view_compact: false,
+            view_chars_per_row: Cell::new(1),
             summarizer: Summarizer::start(),
             prev_sessions: HashMap::new(),
         }
@@ -196,6 +200,63 @@ impl App {
     }
 
     fn handle_key_view(&mut self, key: KeyEvent) {
+        // Compact mode (no zoom): hjkl/arrows navigate agents in a 2D grid across rooms.
+        if self.view_compact && self.view_zoomed_room.is_none() {
+            let total = self.compact_flat_session_indices().len();
+            if total > 0 {
+                match key.code {
+                    KeyCode::Char('l') | KeyCode::Right => {
+                        self.view_selected_agent = (self.view_selected_agent + 1).min(total - 1);
+                        return;
+                    }
+                    KeyCode::Char('h') | KeyCode::Left => {
+                        self.view_selected_agent = self.view_selected_agent.saturating_sub(1);
+                        return;
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        self.view_selected_agent = self.compact_grid_move_down();
+                        return;
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        self.view_selected_agent = self.compact_grid_move_up();
+                        return;
+                    }
+                    KeyCode::Enter => {
+                        if let Some(session) = self.selected_compact_session() {
+                            if let Some(target) = session.pane_target.clone() {
+                                tmux::switch_to_pane(&target);
+                                self.should_quit = true;
+                            }
+                        }
+                        return;
+                    }
+                    KeyCode::Char('x') => {
+                        if let Some(session) = self.selected_compact_session() {
+                            if let Some(name) = session.tmux_session.clone() {
+                                tmux::kill_session(&name);
+                                self.refresh();
+                            }
+                        }
+                        return;
+                    }
+                    KeyCode::Char('n') => {
+                        if let Some(cwd) = self.selected_compact_cwd() {
+                            let default_name = std::path::Path::new(&cwd)
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "claude".to_string());
+                            if let Ok(name) = tmux::create_session(&default_name, &cwd, None, &[]) {
+                                tmux::switch_to_pane(&name);
+                                self.should_quit = true;
+                            }
+                        }
+                        return;
+                    }
+                    _ => {} // fall through to shared keys (q, /, v, 1-9)
+                }
+            }
+        }
+
         // Agent interaction keys (only when zoomed into a room)
         if self.view_zoomed_room.is_some() {
             match key.code {
@@ -413,6 +474,108 @@ impl App {
 
     fn zoomed_room_cwd(&self) -> Option<String> {
         self.selected_zoomed_session().map(|s| s.cwd.clone())
+    }
+
+    fn compact_flat_session_indices(&self) -> Vec<usize> {
+        let filtered = self.filtered_indices();
+        let rooms = view_ui::group_into_rooms(&self.sessions, &filtered);
+        rooms
+            .into_iter()
+            .flat_map(|r| r.session_indices.into_iter())
+            .collect()
+    }
+
+    fn selected_compact_session(&self) -> Option<&Session> {
+        let indices = self.compact_flat_session_indices();
+        if indices.is_empty() {
+            return None;
+        }
+        let clamped = self.view_selected_agent.min(indices.len() - 1);
+        self.sessions.get(indices[clamped])
+    }
+
+    fn selected_compact_cwd(&self) -> Option<String> {
+        self.selected_compact_session().map(|s| s.cwd.clone())
+    }
+
+    // Grid layout helper: returns Vec<(session_count, rows, base_global_idx)> per room.
+    fn compact_room_layouts(&self, cpr: usize) -> (Vec<(usize, usize, usize)>, usize) {
+        let filtered = self.filtered_indices();
+        let rooms = view_ui::group_into_rooms(&self.sessions, &filtered);
+        let mut out = Vec::with_capacity(rooms.len());
+        let mut base = 0usize;
+        for r in &rooms {
+            let n = r.session_indices.len();
+            let rows = if cpr == 0 { 0 } else { (n + cpr - 1) / cpr };
+            out.push((n, rows, base));
+            base += n;
+        }
+        (out, base)
+    }
+
+    fn idx_to_pos(g: usize, layouts: &[(usize, usize, usize)], cpr: usize) -> Option<(usize, usize, usize)> {
+        for (i, &(n, _rows, base)) in layouts.iter().enumerate() {
+            if g < base + n {
+                let local = g - base;
+                return Some((i, local / cpr, local % cpr));
+            }
+        }
+        None
+    }
+
+    fn cells_in_row(n: usize, row: usize, cpr: usize) -> usize {
+        let rows = (n + cpr - 1) / cpr;
+        if row + 1 == rows {
+            let rem = n % cpr;
+            if rem == 0 { cpr } else { rem }
+        } else {
+            cpr
+        }
+    }
+
+    fn compact_grid_move_down(&self) -> usize {
+        let cpr = self.view_chars_per_row.get().max(1);
+        let (layouts, _total) = self.compact_room_layouts(cpr);
+        let g = self.view_selected_agent;
+        let Some((room_i, row, col)) = Self::idx_to_pos(g, &layouts, cpr) else { return g };
+        let (n, rows, base) = layouts[room_i];
+
+        if row + 1 < rows {
+            let cells = Self::cells_in_row(n, row + 1, cpr);
+            let target_col = col.min(cells.saturating_sub(1));
+            return base + (row + 1) * cpr + target_col;
+        }
+        if room_i + 1 < layouts.len() {
+            let (next_n, _next_rows, next_base) = layouts[room_i + 1];
+            if next_n == 0 { return g; }
+            let cells = Self::cells_in_row(next_n, 0, cpr);
+            let target_col = col.min(cells.saturating_sub(1));
+            return next_base + target_col;
+        }
+        g
+    }
+
+    fn compact_grid_move_up(&self) -> usize {
+        let cpr = self.view_chars_per_row.get().max(1);
+        let (layouts, _total) = self.compact_room_layouts(cpr);
+        let g = self.view_selected_agent;
+        let Some((room_i, row, col)) = Self::idx_to_pos(g, &layouts, cpr) else { return g };
+        let (_n, _rows, base) = layouts[room_i];
+
+        if row > 0 {
+            let cells = Self::cells_in_row(_n, row - 1, cpr);
+            let target_col = col.min(cells.saturating_sub(1));
+            return base + (row - 1) * cpr + target_col;
+        }
+        if room_i > 0 {
+            let (prev_n, prev_rows, prev_base) = layouts[room_i - 1];
+            if prev_n == 0 || prev_rows == 0 { return g; }
+            let last_row = prev_rows - 1;
+            let cells = Self::cells_in_row(prev_n, last_row, cpr);
+            let target_col = col.min(cells.saturating_sub(1));
+            return prev_base + last_row * cpr + target_col;
+        }
+        g
     }
 
     pub fn to_json(&self, tag_filters: &[String]) -> String {
