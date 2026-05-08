@@ -2051,6 +2051,12 @@ fn render_empty(frame: &mut Frame, area: Rect, _tick: u64) {
 }
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
+    if let Some(msg) = app.active_status_message() {
+        let line = Line::from(Span::styled(msg.to_string(), Style::default().fg(Color::Yellow)));
+        frame.render_widget(Paragraph::new(line), area);
+        return;
+    }
+
     let mut spans = vec![];
 
     if app.view_zoomed_room.is_some() {
@@ -2066,6 +2072,12 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" editor  "));
         spans.push(Span::styled("t", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" terminal  "));
+        spans.push(Span::styled("g", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" lazygit  "));
+        spans.push(Span::styled("d", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" diffnav  "));
+        spans.push(Span::styled("D", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" dash  "));
     } else {
         spans.push(Span::styled("1-9", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" select  "));
@@ -2075,6 +2087,12 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" editor  "));
         spans.push(Span::styled("t", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" terminal  "));
+        spans.push(Span::styled("g", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" lazygit  "));
+        spans.push(Span::styled("d", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" diffnav  "));
+        spans.push(Span::styled("D", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" dash  "));
     }
 
     spans.push(Span::styled("/", Style::default().fg(Color::Cyan)));

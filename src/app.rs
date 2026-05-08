@@ -1,7 +1,10 @@
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+const STATUS_MESSAGE_TTL: Duration = Duration::from_secs(3);
 
 use crate::session::{self, Session};
 use crate::summarizer::Summarizer;
@@ -22,6 +25,7 @@ pub struct App {
     pub view_chars_per_row: Cell<usize>,
     pub view_room_order: Vec<String>,
     pub summarizer: Summarizer,
+    pub status_message: Option<(String, Instant)>,
     prev_sessions: HashMap<String, Session>,
 }
 
@@ -49,8 +53,19 @@ impl App {
             view_chars_per_row: Cell::new(1),
             view_room_order: Vec::new(),
             summarizer,
+            status_message: None,
             prev_sessions: HashMap::new(),
         }
+    }
+
+    pub fn set_status(&mut self, msg: impl Into<String>) {
+        self.status_message = Some((msg.into(), Instant::now()));
+    }
+
+    pub fn active_status_message(&self) -> Option<&str> {
+        self.status_message.as_ref().and_then(|(msg, ts)| {
+            if ts.elapsed() < STATUS_MESSAGE_TTL { Some(msg.as_str()) } else { None }
+        })
     }
 
     pub fn refresh(&mut self) {
@@ -227,6 +242,24 @@ impl App {
                     }
                     return;
                 }
+                KeyCode::Char('g') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        self.open_tui_tool("lazygit", "lazygit", &cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('d') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        self.open_diffnav(&cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('D') => {
+                    if let Some(cwd) = self.selected_compact_cwd() {
+                        self.open_tui_tool("gh", "gh dash", &cwd);
+                    }
+                    return;
+                }
                 KeyCode::Char(c @ '1'..='9') => {
                     let idx = (c as usize) - ('1' as usize);
                     if idx < total {
@@ -305,6 +338,24 @@ impl App {
                             tmux::switch_to_pane(&name);
                             self.should_quit = true;
                         }
+                    }
+                    return;
+                }
+                KeyCode::Char('g') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        self.open_tui_tool("lazygit", "lazygit", &cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('d') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        self.open_diffnav(&cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('D') => {
+                    if let Some(cwd) = self.zoomed_room_cwd() {
+                        self.open_tui_tool("gh", "gh dash", &cwd);
                     }
                     return;
                 }
@@ -474,6 +525,43 @@ impl App {
         self.selected_zoomed_session().map(|s| s.cwd.clone())
     }
 
+    fn open_tui_tool(&mut self, binary: &str, command: &str, cwd: &str) {
+        if !binary_in_path(binary) {
+            return;
+        }
+        let label = std::path::Path::new(cwd)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| binary.to_string());
+        if let Ok(name) = tmux::create_session(&label, cwd, Some(command), &[]) {
+            tmux::switch_to_pane(&name);
+            self.should_quit = true;
+        }
+    }
+
+    fn open_diffnav(&mut self, cwd: &str) {
+        if !binary_in_path("diffnav") {
+            return;
+        }
+        let no_diff = std::process::Command::new("git")
+            .args(["-C", cwd, "diff", "HEAD", "--quiet"])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(true);
+        if no_diff {
+            self.set_status("No diff");
+            return;
+        }
+        let label = std::path::Path::new(cwd)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "diffnav".to_string());
+        if let Ok(name) = tmux::create_session_shell(&label, cwd, "git diff HEAD | diffnav") {
+            tmux::switch_to_pane(&name);
+            self.should_quit = true;
+        }
+    }
+
     fn compact_flat_session_indices(&self) -> Vec<usize> {
         let filtered = self.filtered_indices();
         let rooms = view_ui::group_into_rooms_stable(&self.sessions, &filtered, &self.view_room_order);
@@ -574,4 +662,10 @@ impl App {
         }
         g
     }
+}
+
+fn binary_in_path(name: &str) -> bool {
+    std::env::var("PATH").ok().map(|path| {
+        path.split(':').any(|dir| std::path::Path::new(dir).join(name).is_file())
+    }).unwrap_or(false)
 }
