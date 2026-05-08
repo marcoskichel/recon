@@ -1,7 +1,10 @@
 mod app;
+mod cli;
 mod model;
 mod session;
+mod summarizer;
 mod tmux;
+mod view_lock;
 mod view_ui;
 
 use std::collections::HashMap;
@@ -10,6 +13,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use clap::Parser;
 use crossterm::{
     event::{self, Event},
     execute,
@@ -19,9 +23,50 @@ use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 
 use app::App;
+use cli::{Cli, Command};
 use session::Session;
 
 fn main() -> io::Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Command::Daemon { interval }) => {
+            run_daemon(interval);
+            Ok(())
+        }
+        None => run_tui(),
+    }
+}
+
+fn run_daemon(interval_secs: u64) {
+    let mut app = App::new();
+    if !app.summarizer.enabled() {
+        eprintln!("recon daemon: summarizer disabled (no Ollama and no ANTHROPIC_API_KEY).");
+        std::process::exit(1);
+    }
+    eprintln!("recon daemon: polling every {}s. Ctrl-C to stop.", interval_secs);
+    let interval = Duration::from_secs(interval_secs.max(2));
+    let mut was_paused = false;
+    loop {
+        if view_lock::is_active() {
+            if !was_paused {
+                eprintln!("recon daemon: view active, pausing polling.");
+                was_paused = true;
+            }
+        } else {
+            if was_paused {
+                eprintln!("recon daemon: view closed, resuming polling.");
+                was_paused = false;
+            }
+            app.refresh();
+        }
+        std::thread::sleep(interval);
+    }
+}
+
+fn run_tui() -> io::Result<()> {
+    let _view_lock = view_lock::ViewLock::acquire();
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;

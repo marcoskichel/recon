@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::session::{self, Session};
+use crate::summarizer::Summarizer;
 use crate::tmux;
 use crate::view_ui;
 
@@ -21,6 +22,7 @@ pub struct App {
     pub filter_cursor: usize,
     pub view_chars_per_row: Cell<usize>,
     pub view_room_order: Vec<String>,
+    pub summarizer: Summarizer,
     prev_sessions: HashMap<String, Session>,
 }
 
@@ -40,6 +42,7 @@ impl App {
             filter_cursor: 0,
             view_chars_per_row: Cell::new(1),
             view_room_order: Vec::new(),
+            summarizer: Summarizer::start(),
             prev_sessions: HashMap::new(),
         }
     }
@@ -60,6 +63,13 @@ impl App {
     }
 
     pub fn apply_snapshot(&mut self, sessions: Vec<Session>) {
+        for s in &sessions {
+            if !s.jsonl_path.as_os_str().is_empty() {
+                self.summarizer
+                    .maybe_enqueue(&s.session_id, &s.jsonl_path, s.last_file_size);
+            }
+        }
+
         self.sessions = sessions;
 
         let count = self.filtered_indices().len();

@@ -742,7 +742,7 @@ fn render_room(
 
 fn render_character(
     frame: &mut Frame,
-    _app: &App,
+    app: &App,
     session: &Session,
     area: Rect,
     tick: u64,
@@ -771,14 +771,21 @@ fn render_character(
     let sprite_lines = render_sprite_lines(sprite, palette);
     lines.extend(sprite_lines);
 
-    // Label priority: last user prompt > tmux session name
+    // Label priority: LLM summary > last user prompt > tmux session name
+    let summary_owned = app
+        .summarizer
+        .store
+        .get(&session.session_id)
+        .map(|s: String| sanitize_prompt(s.as_str()))
+        .filter(|s| !s.is_empty());
     let prompt_owned = session
         .last_user_prompt
         .as_deref()
         .map(sanitize_prompt)
         .filter(|s| !s.is_empty());
-    let name = prompt_owned
+    let name = summary_owned
         .as_deref()
+        .or(prompt_owned.as_deref())
         .or(session.tmux_session.as_deref())
         .unwrap_or("???");
     let name_style = if is_selected {
@@ -868,7 +875,7 @@ fn wide_context_bar(ratio: f64, total_width: usize) -> (Vec<Span<'static>>, Colo
 
 fn render_character_compact(
     frame: &mut Frame,
-    _app: &App,
+    app: &App,
     session: &Session,
     area: Rect,
     tick: u64,
@@ -924,14 +931,21 @@ fn render_character_compact(
     let text_area = chunks[1];
     let text_w = text_area.width as usize;
 
-    // Label priority: last user prompt > tmux session name
+    // Label priority: LLM summary > last user prompt > tmux session name
+    let summary_owned = app
+        .summarizer
+        .store
+        .get(&session.session_id)
+        .map(|s: String| sanitize_prompt(s.as_str()))
+        .filter(|s| !s.is_empty());
     let prompt_owned = session
         .last_user_prompt
         .as_deref()
         .map(sanitize_prompt)
         .filter(|s| !s.is_empty());
-    let name = prompt_owned
+    let name = summary_owned
         .as_deref()
+        .or(prompt_owned.as_deref())
         .or(session.tmux_session.as_deref())
         .unwrap_or("???");
     let name_style = Style::default()
