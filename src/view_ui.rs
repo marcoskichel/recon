@@ -740,7 +740,6 @@ fn render_character(
         Style::default().fg(Color::White)
     };
     let name_lines = wrap_label(name, area.width as usize, NAME_LINES as usize);
-    let real_name_lines = name_lines.len().min(NAME_LINES as usize);
     for line in name_lines.iter().take(NAME_LINES as usize) {
         lines.push(Line::from(Span::styled(line.clone(), name_style)));
     }
@@ -752,14 +751,8 @@ fn render_character(
         Style::default().fg(Color::Green),
     )));
 
-    // Padding below branch absorbs whatever name lines were unused so the
-    // overall char cell height stays CHAR_HEIGHT.
-    let slack = (NAME_LINES as usize).saturating_sub(real_name_lines);
-    for _ in 0..slack {
-        lines.push(Line::from(""));
-    }
-
-    // Context bar
+    // Context bar sits directly under the branch; any unused vertical slack
+    // falls below it as natural cell padding.
     let (bar_str, bar_color) = context_bar(ratio);
     lines.push(Line::from(Span::styled(
         truncate_str(&bar_str, area.width as usize),
