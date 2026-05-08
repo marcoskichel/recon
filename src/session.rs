@@ -113,6 +113,9 @@ pub struct Session {
 
 impl Session {
     pub fn room_id(&self) -> String {
+        if let Some(name) = &self.tmux_session {
+            return name.clone();
+        }
         match &self.relative_dir {
             Some(dir) => format!("{} \u{203A} {}", self.project_name, dir),
             None => self.project_name.clone(),
