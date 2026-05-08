@@ -490,7 +490,7 @@ struct ParsedInfo {
     last_user_prompt: Option<String>,
 }
 
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 struct StableGitInfo {
@@ -508,19 +508,54 @@ static BRANCH_CACHE: Mutex<Option<HashMap<String, BranchInfo>>> = Mutex::new(Non
 
 const BRANCH_CACHE_TTL: Duration = Duration::from_secs(300);
 
+/// Allowlist parsed from `RECON_TCC_ALLOW` (comma-separated absolute paths).
+///
+/// Any CWD under one of these prefixes bypasses the TCC-protected check —
+/// useful when the user keeps real projects under `~/Documents` or `~/Desktop`
+/// and is willing to grant the one-time macOS permission prompt.
+fn tcc_allow_paths() -> &'static [PathBuf] {
+    static CACHE: OnceLock<Vec<PathBuf>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        std::env::var("RECON_TCC_ALLOW")
+            .ok()
+            .map(|v| {
+                v.split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(PathBuf::from)
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+}
+
+const TCC_PROTECTED_DIRS: &[&str] = &[
+    "Pictures", "Desktop", "Documents", "Downloads", "Music", "Movies",
+];
+
+/// Pure check: is `path` inside a TCC-protected dir under `home`, after
+/// honoring the explicit `allow` list?
+fn is_tcc_protected_with(path: &Path, home: Option<&Path>, allow: &[PathBuf]) -> bool {
+    if allow.iter().any(|p| path.starts_with(p)) {
+        return false;
+    }
+    let Some(home) = home else {
+        return false;
+    };
+    TCC_PROTECTED_DIRS
+        .iter()
+        .any(|dir| path.starts_with(home.join(dir)))
+}
+
 /// Returns true if `path` is inside a macOS TCC-protected directory.
 ///
 /// Running `git -C <path>` inside these dirs triggers system permission
 /// prompts (Photos, Desktop, Documents, Downloads, etc.) even when recon
 /// has no legitimate need to access those files.
+///
+/// Override via `RECON_TCC_ALLOW=/abs/path1,/abs/path2`.
 fn is_tcc_protected(path: &Path) -> bool {
-    let Some(home) = dirs::home_dir() else {
-        return false;
-    };
-    const PROTECTED: &[&str] = &[
-        "Pictures", "Desktop", "Documents", "Downloads", "Music", "Movies",
-    ];
-    PROTECTED.iter().any(|dir| path.starts_with(home.join(dir)))
+    is_tcc_protected_with(path, dirs::home_dir().as_deref(), tcc_allow_paths())
 }
 
 /// Get the git project name, relative_dir, and branch for a directory.
@@ -1385,15 +1420,40 @@ mod tests {
     }
 
     #[test]
-    fn tcc_protected_detects_pictures() {
-        if let Some(home) = dirs::home_dir() {
-            assert!(is_tcc_protected(&home.join("Pictures").join("Photos Library.photoslibrary")));
-            assert!(is_tcc_protected(&home.join("Pictures").join("vacation")));
-            assert!(is_tcc_protected(&home.join("Desktop").join("file.txt")));
-            assert!(is_tcc_protected(&home.join("Documents").join("work")));
-            assert!(is_tcc_protected(&home.join("Downloads")));
-            assert!(!is_tcc_protected(&home.join("dev").join("myproject")));
-            assert!(!is_tcc_protected(Path::new("/tmp/something")));
-        }
+    fn tcc_protected_detects_known_dirs() {
+        let home = Path::new("/Users/test");
+        let no_allow: Vec<PathBuf> = vec![];
+        assert!(is_tcc_protected_with(
+            &home.join("Pictures").join("Photos Library.photoslibrary"),
+            Some(home),
+            &no_allow,
+        ));
+        assert!(is_tcc_protected_with(&home.join("Desktop").join("a"), Some(home), &no_allow));
+        assert!(is_tcc_protected_with(&home.join("Documents").join("work"), Some(home), &no_allow));
+        assert!(is_tcc_protected_with(&home.join("Downloads"), Some(home), &no_allow));
+        assert!(!is_tcc_protected_with(&home.join("dev").join("project"), Some(home), &no_allow));
+        assert!(!is_tcc_protected_with(Path::new("/tmp/x"), Some(home), &no_allow));
+    }
+
+    #[test]
+    fn tcc_allow_list_overrides_protection() {
+        let home = Path::new("/Users/test");
+        let allow = vec![home.join("Documents").join("code")];
+        assert!(!is_tcc_protected_with(
+            &home.join("Documents").join("code").join("project"),
+            Some(home),
+            &allow,
+        ));
+        assert!(is_tcc_protected_with(
+            &home.join("Documents").join("personal"),
+            Some(home),
+            &allow,
+        ));
+    }
+
+    #[test]
+    fn tcc_protected_no_home_returns_false() {
+        let allow: Vec<PathBuf> = vec![];
+        assert!(!is_tcc_protected_with(Path::new("/anywhere"), None, &allow));
     }
 }

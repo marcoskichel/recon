@@ -282,6 +282,11 @@ This lets you pop open the dashboard from any tmux session, pick a session with 
 ## Known Limitations
 
 - **`/clear` resets session tracking** — Claude Code's `/clear` command creates a new JSONL file without updating the session-to-process mapping. After `/clear`, recon may show stale data (old tokens, old timestamps) until the session is restarted. Workaround: kill the session in recon and create a new one.
+- **macOS TCC prompts** — recon runs `git -C <session-cwd>` to derive project name and branch. If a session's CWD is under a TCC-protected directory (`~/Pictures`, `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Music`, `~/Movies`), recon skips git enrichment to avoid permission prompts. To re-enable git for specific paths under those dirs, set `RECON_TCC_ALLOW` to a comma-separated list of absolute prefixes:
+
+  ```bash
+  export RECON_TCC_ALLOW=/Users/me/Documents/code,/Users/me/Desktop/work
+  ```
 
 ## Contribution Policy
 
