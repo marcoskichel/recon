@@ -12,8 +12,8 @@ pub struct Cli {
 pub enum Command {
     /// Open the visual (tamagotchi) dashboard
     View {
-        /// Compact mode: render single-room view filling the pane (no 2x2 grid, no zoom prompts).
-        /// Auto-selects the room matching the current tmux session.
+        /// Compact mode: stack every room vertically with spacing between
+        /// groups (no 2x2 grid, no pagination). Press 1-4 to zoom into a room.
         #[arg(long)]
         compact: bool,
     },

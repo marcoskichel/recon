@@ -359,25 +359,9 @@ pub fn resolve_zoom(app: &mut App) {
         app.view_page = 0;
     }
 
-    if app.view_compact && app.view_zoomed_room.is_none() {
-        let current = crate::tmux::current_session_name();
-        let picked = current
-            .as_ref()
-            .and_then(|name| {
-                rooms.iter().find(|r| {
-                    r.session_indices.iter().any(|&i| {
-                        app.sessions
-                            .get(i)
-                            .and_then(|s| s.tmux_session.as_deref())
-                            == Some(name.as_str())
-                    })
-                })
-            })
-            .or_else(|| rooms.first());
-        if let Some(room) = picked {
-            app.view_zoomed_room = Some(room.name.clone());
-        }
-    }
+    // Compact mode shows every room stacked vertically by default.
+    // Auto-zoom is no longer applied — users may still zoom into a room
+    // explicitly via 1-4.
 
     if let Some(idx) = app.view_zoom_index.take() {
         let page_start = app.view_page * ROOMS_PER_PAGE;
@@ -457,6 +441,11 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 
+    if app.view_compact {
+        render_rooms_stacked(frame, app, &rooms, area);
+        return;
+    }
+
     let total_pages = (rooms.len() + ROOMS_PER_PAGE - 1) / ROOMS_PER_PAGE;
     let page = app.view_page.min(total_pages.saturating_sub(1));
     let page_start = page * ROOMS_PER_PAGE;
@@ -483,6 +472,63 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(Color::Rgb(30, 30, 30)));
             frame.render_widget(block, *cell);
         }
+    }
+}
+
+fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect) {
+    if area.height == 0 || area.width == 0 || rooms.is_empty() {
+        return;
+    }
+
+    const ROOM_GAP: u16 = 1;
+    const ROOM_BORDER_OVERHEAD: u16 = 2; // top + bottom border
+    let inner_width = area.width.saturating_sub(2); // borders consume 2 cols
+    let chars_per_row = (inner_width / CHAR_WIDTH).max(1) as usize;
+
+    let mut constraints: Vec<Constraint> = Vec::new();
+    let mut visible_rooms: Vec<&Room> = Vec::new();
+    let mut used: u16 = 0;
+
+    for (idx, room) in rooms.iter().enumerate() {
+        let n = room.session_indices.len().max(1);
+        let rows = ((n + chars_per_row - 1) / chars_per_row) as u16;
+        let needed = rows * CHAR_HEIGHT + ROOM_BORDER_OVERHEAD;
+        let gap = if idx == 0 { 0 } else { ROOM_GAP };
+        if used.saturating_add(needed).saturating_add(gap) > area.height {
+            break;
+        }
+        if gap > 0 {
+            constraints.push(Constraint::Length(gap));
+        }
+        constraints.push(Constraint::Length(needed));
+        visible_rooms.push(room);
+        used += needed + gap;
+    }
+
+    if visible_rooms.is_empty() {
+        // Fall back to letting the first room consume what it can.
+        render_room(frame, app, &rooms[0], area, Some(1), None);
+        return;
+    }
+
+    // Pad remaining vertical space so rooms don't stretch.
+    if used < area.height {
+        constraints.push(Constraint::Min(0));
+    }
+
+    let chunks = Layout::vertical(constraints).split(area);
+
+    let mut chunk_idx = 0usize;
+    for (i, room) in visible_rooms.iter().enumerate() {
+        if i > 0 {
+            chunk_idx += 1; // skip gap chunk
+        }
+        if chunk_idx >= chunks.len() {
+            break;
+        }
+        let slot = if i < ROOMS_PER_PAGE { Some(i + 1) } else { None };
+        render_room(frame, app, room, chunks[chunk_idx], slot, None);
+        chunk_idx += 1;
     }
 }
 
