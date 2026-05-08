@@ -274,10 +274,11 @@ bind g display-popup -E -w 80% -h 60% "recon"        # prefix + g → dashboard
 bind n display-popup -E -w 80% -h 60% "recon new"    # prefix + n → new session
 bind r display-popup -E -w 80% -h 60% "recon resume" # prefix + r → resume picker
 bind i run-shell "recon next"                         # prefix + i → jump to next input agent
+bind e run-shell "recon dock-toggle"                 # prefix + e → toggle dock sidebar
 bind X confirm-before -p "Kill session #S? (y/n)" kill-session
 ```
 
-This lets you pop open the dashboard from any tmux session, pick a session with `Enter`, and jump straight to it.
+This lets you pop open the dashboard from any tmux session, pick a session with `Enter`, and jump straight to it. `prefix + e` spawns/kills a 14-col dock pane on the right of the current window — the dock shows a mini sprite + token bar per session and supports the same keys as the main view (`hjkl`, `Enter`, `x`, `n`, `1`-`9`, `q`).
 
 ## Known Limitations
 

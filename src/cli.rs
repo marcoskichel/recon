@@ -17,4 +17,10 @@ pub enum Command {
         #[arg(long, default_value_t = 10u64)]
         interval: u64,
     },
+    /// Show a compact dock: one mini-sprite per session. Designed to run in
+    /// a small tmux pane. Press q to quit.
+    Dock,
+    /// Toggle the dock pane (sidebar) in the current tmux window.
+    /// Spawns it on the right if missing, kills it if present.
+    DockToggle,
 }

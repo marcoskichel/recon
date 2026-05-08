@@ -34,8 +34,68 @@ fn main() -> io::Result<()> {
             run_daemon(interval);
             Ok(())
         }
+        Some(Command::Dock) => run_dock(),
+        Some(Command::DockToggle) => run_dock_toggle(),
         None => run_tui(),
     }
+}
+
+fn run_dock_toggle() -> io::Result<()> {
+    use std::process::Command as ProcCommand;
+
+    let tmux = |args: &[&str]| -> io::Result<String> {
+        let out = ProcCommand::new("tmux").args(args).output()?;
+        if !out.status.success() {
+            let msg = String::from_utf8_lossy(&out.stderr).to_string();
+            return Err(io::Error::new(io::ErrorKind::Other, msg));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+
+    if std::env::var_os("TMUX").is_none() {
+        eprintln!("recon dock-toggle: not inside tmux");
+        std::process::exit(1);
+    }
+
+    let win = tmux(&["display-message", "-p", "#{window_id}"])?;
+    let panes = tmux(&[
+        "list-panes",
+        "-t",
+        &win,
+        "-F",
+        "#{pane_id} #{pane_title}",
+    ])?;
+
+    let dock_pane = panes.lines().find_map(|line| {
+        let mut parts = line.splitn(2, ' ');
+        let id = parts.next()?;
+        let title = parts.next().unwrap_or("");
+        if title == "recon-dock" {
+            Some(id.to_string())
+        } else {
+            None
+        }
+    });
+
+    if let Some(id) = dock_pane {
+        tmux(&["kill-pane", "-t", &id])?;
+    } else {
+        let new_id = tmux(&[
+            "split-window",
+            "-h",
+            "-l",
+            "9",
+            "-d",
+            "-P",
+            "-F",
+            "#{pane_id}",
+            "-t",
+            &win,
+            "recon dock",
+        ])?;
+        tmux(&["select-pane", "-t", &new_id, "-T", "recon-dock"])?;
+    }
+    Ok(())
 }
 
 fn run_daemon(interval_secs: u64) {
@@ -102,6 +162,76 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
             loop {
                 if let Event::Key(key) = event::read()? {
                     app.handle_key(key);
+                }
+                if !event::poll(Duration::from_millis(0))? {
+                    break;
+                }
+            }
+        }
+
+        let mut latest: Option<Vec<Session>> = None;
+        while let Ok(snapshot) = rx.try_recv() {
+            latest = Some(snapshot);
+        }
+        if let Some(snapshot) = latest {
+            app.apply_snapshot(snapshot);
+        }
+
+        if app.should_quit {
+            return Ok(());
+        }
+    }
+}
+
+fn run_dock() -> io::Result<()> {
+    let _view_lock = view_lock::ViewLock::acquire();
+
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let result = run_dock_loop(&mut terminal);
+
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    if let Err(e) = result {
+        eprintln!("Error: {e}");
+    }
+    Ok(())
+}
+
+fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
+    let mut app = App::new();
+    app.refresh();
+
+    let (tx, rx) = mpsc::channel::<Vec<Session>>();
+    let initial_prev = app.snapshot_prev();
+    thread::spawn(move || run_refresh_worker(tx, initial_prev));
+
+    loop {
+        terminal.draw(|f| view_ui::render_dock(f, &app))?;
+        app.advance_tick();
+
+        if event::poll(Duration::from_millis(100))? {
+            loop {
+                if let Event::Key(key) = event::read()? {
+                    use crossterm::event::KeyCode;
+                    let translated = if !app.filter_active {
+                        let mut k = key;
+                        k.code = match key.code {
+                            KeyCode::Char('j') | KeyCode::Down => KeyCode::Char('l'),
+                            KeyCode::Char('k') | KeyCode::Up => KeyCode::Char('h'),
+                            c => c,
+                        };
+                        k
+                    } else {
+                        key
+                    };
+                    app.handle_key(translated);
                 }
                 if !event::poll(Duration::from_millis(0))? {
                     break;
