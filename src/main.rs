@@ -186,6 +186,15 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
 fn run_dock() -> io::Result<()> {
     let _view_lock = view_lock::ViewLock::acquire();
 
+    // Set tmux pane title via OSC so dock-toggle and hooks can identify
+    // this pane reliably regardless of which command spawned it.
+    {
+        use std::io::Write;
+        let mut stdout = io::stdout();
+        let _ = write!(stdout, "\u{1b}]2;recon-dock\u{1b}\\");
+        let _ = stdout.flush();
+    }
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
