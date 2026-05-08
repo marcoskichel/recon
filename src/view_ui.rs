@@ -418,7 +418,7 @@ pub fn resolve_zoom(app: &mut App) {
                 app.view_selected_agent = 0;
             }
         }
-    } else if app.view_compact {
+    } else if true {
         // Compact non-zoomed: clamp to total session count across rooms.
         let total: usize = rooms.iter().map(|r| r.session_indices.len()).sum();
         if total > 0 {
@@ -487,7 +487,7 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    if app.view_compact {
+    if true {
         render_rooms_stacked(frame, app, &rooms, area);
         return;
     }
@@ -618,14 +618,14 @@ fn render_rooms_stacked(frame: &mut Frame, app: &App, rooms: &[Room], area: Rect
         };
         let offset = prefix_sums.get(room_idx).copied().unwrap_or(0);
         // In compact (non-zoomed) mode, digits select agents, not rooms — drop room slot label.
-        let slot = if app.view_compact && app.view_zoomed_room.is_none() {
+        let slot = if true && app.view_zoomed_room.is_none() {
             None
         } else if i < ROOMS_PER_PAGE {
             Some(i + 1)
         } else {
             None
         };
-        let agent_label_offset = if app.view_compact && app.view_zoomed_room.is_none() {
+        let agent_label_offset = if true && app.view_zoomed_room.is_none() {
             Some(offset)
         } else {
             None
@@ -742,7 +742,7 @@ fn render_room(
 
 fn render_character(
     frame: &mut Frame,
-    app: &App,
+    _app: &App,
     session: &Session,
     area: Rect,
     tick: u64,
@@ -771,21 +771,14 @@ fn render_character(
     let sprite_lines = render_sprite_lines(sprite, palette);
     lines.extend(sprite_lines);
 
-    // Label priority: LLM summary > last user prompt > tmux session name
-    let summary_owned = app
-        .summarizer
-        .store
-        .get(&session.session_id)
-        .map(|s: String| sanitize_prompt(s.as_str()))
-        .filter(|s| !s.is_empty());
+    // Label priority: last user prompt > tmux session name
     let prompt_owned = session
         .last_user_prompt
         .as_deref()
         .map(sanitize_prompt)
         .filter(|s| !s.is_empty());
-    let name = summary_owned
+    let name = prompt_owned
         .as_deref()
-        .or(prompt_owned.as_deref())
         .or(session.tmux_session.as_deref())
         .unwrap_or("???");
     let name_style = if is_selected {
@@ -875,7 +868,7 @@ fn wide_context_bar(ratio: f64, total_width: usize) -> (Vec<Span<'static>>, Colo
 
 fn render_character_compact(
     frame: &mut Frame,
-    app: &App,
+    _app: &App,
     session: &Session,
     area: Rect,
     tick: u64,
@@ -931,21 +924,14 @@ fn render_character_compact(
     let text_area = chunks[1];
     let text_w = text_area.width as usize;
 
-    // Label priority: LLM summary > last user prompt > tmux session name
-    let summary_owned = app
-        .summarizer
-        .store
-        .get(&session.session_id)
-        .map(|s: String| sanitize_prompt(s.as_str()))
-        .filter(|s| !s.is_empty());
+    // Label priority: last user prompt > tmux session name
     let prompt_owned = session
         .last_user_prompt
         .as_deref()
         .map(sanitize_prompt)
         .filter(|s| !s.is_empty());
-    let name = summary_owned
+    let name = prompt_owned
         .as_deref()
-        .or(prompt_owned.as_deref())
         .or(session.tmux_session.as_deref())
         .unwrap_or("???");
     let name_style = Style::default()
@@ -1032,7 +1018,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" kill  "));
         spans.push(Span::styled("n", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" new  "));
-        if !app.view_compact {
+        if !true {
             spans.push(Span::styled("Esc", Style::default().fg(Color::Cyan)));
             spans.push(Span::raw(" back  "));
         }
