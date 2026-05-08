@@ -508,6 +508,21 @@ static BRANCH_CACHE: Mutex<Option<HashMap<String, BranchInfo>>> = Mutex::new(Non
 
 const BRANCH_CACHE_TTL: Duration = Duration::from_secs(300);
 
+/// Returns true if `path` is inside a macOS TCC-protected directory.
+///
+/// Running `git -C <path>` inside these dirs triggers system permission
+/// prompts (Photos, Desktop, Documents, Downloads, etc.) even when recon
+/// has no legitimate need to access those files.
+fn is_tcc_protected(path: &Path) -> bool {
+    let Some(home) = dirs::home_dir() else {
+        return false;
+    };
+    const PROTECTED: &[&str] = &[
+        "Pictures", "Desktop", "Documents", "Downloads", "Music", "Movies",
+    ];
+    PROTECTED.iter().any(|dir| path.starts_with(home.join(dir)))
+}
+
 /// Get the git project name, relative_dir, and branch for a directory.
 ///
 /// repo_name and relative_dir are immutable per CWD — cached forever to avoid
@@ -520,6 +535,14 @@ fn git_project_info(cwd: &str) -> (String, Option<String>, Option<String>) {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| cwd.to_string());
         return (fallback, None, None);
+    }
+
+    if is_tcc_protected(Path::new(cwd)) {
+        let name = Path::new(cwd)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| cwd.to_string());
+        return (name, None, None);
     }
 
     let (repo_name, relative_dir) = {
@@ -1360,5 +1383,17 @@ mod tests {
     fn validate_cwd_accepts_real_dir() {
         assert!(validate_cwd("/tmp"));
     }
-}
 
+    #[test]
+    fn tcc_protected_detects_pictures() {
+        if let Some(home) = dirs::home_dir() {
+            assert!(is_tcc_protected(&home.join("Pictures").join("Photos Library.photoslibrary")));
+            assert!(is_tcc_protected(&home.join("Pictures").join("vacation")));
+            assert!(is_tcc_protected(&home.join("Desktop").join("file.txt")));
+            assert!(is_tcc_protected(&home.join("Documents").join("work")));
+            assert!(is_tcc_protected(&home.join("Downloads")));
+            assert!(!is_tcc_protected(&home.join("dev").join("myproject")));
+            assert!(!is_tcc_protected(Path::new("/tmp/something")));
+        }
+    }
+}
