@@ -113,7 +113,129 @@ recon resume --id <session-id> --name foo    # Resume with a custom tmux session
 recon next                                   # Jump to the next agent waiting for input
 recon park                                   # Save all live sessions to disk
 recon unpark                                 # Restore previously parked sessions
+recon daemon                                 # Run the summarizer in the background
+recon daemon --interval 30                   # Custom poll interval (seconds)
 ```
+
+## Daemon
+
+`recon daemon` runs the summarizer continuously in the background. It polls active Claude Code sessions, sends new transcripts to a summarizer backend (local Ollama or the Anthropic API), and writes generated labels to `~/.cache/recon/labels`. Those labels then show up in both the table and Tamagotchi views.
+
+The daemon needs at least one backend configured via environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `RECON_SUMMARIZER` | auto | `ollama`, `anthropic`, `claude`, or unset (auto-detect) |
+| `RECON_OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
+| `RECON_OLLAMA_MODEL` | `gemma2:2b` | Ollama model |
+| `ANTHROPIC_API_KEY` | — | Required for the Anthropic backend |
+| `RECON_ANTHROPIC_MODEL` | — | Override the Anthropic model |
+| `RECON_CLAUDE_BINARY` | `claude` | Claude CLI path (claude backend) |
+| `RECON_CLAUDE_MODEL` | — | Claude CLI model override |
+
+If neither Ollama nor `ANTHROPIC_API_KEY` is reachable, the daemon exits with an error.
+
+### Run on system startup — Linux (systemd user service)
+
+Create `~/.config/systemd/user/recon-daemon.service`:
+
+```ini
+[Unit]
+Description=recon summarizer daemon
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/recon daemon --interval 10
+Restart=on-failure
+RestartSec=5
+# Pick one backend. Either point at a running Ollama instance:
+Environment=RECON_OLLAMA_URL=http://localhost:11434
+Environment=RECON_OLLAMA_MODEL=gemma2:2b
+# …or use the Anthropic API (uncomment and set your key):
+# Environment=ANTHROPIC_API_KEY=sk-ant-...
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now recon-daemon.service
+systemctl --user status recon-daemon.service
+journalctl --user -u recon-daemon.service -f      # follow logs
+```
+
+To make the service start at boot (without you logging in), enable lingering once:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+The daemon talks to your tmux server, so it must run as your user — not as a root system service.
+
+### Run on system startup — macOS (launchd LaunchAgent)
+
+Create `~/Library/LaunchAgents/com.recon.daemon.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.recon.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOUR_USERNAME/.cargo/bin/recon</string>
+        <string>daemon</string>
+        <string>--interval</string>
+        <string>10</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <!-- Pick one backend: -->
+        <key>RECON_OLLAMA_URL</key>
+        <string>http://localhost:11434</string>
+        <key>RECON_OLLAMA_MODEL</key>
+        <string>gemma2:2b</string>
+        <!-- Or set ANTHROPIC_API_KEY here instead. -->
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/recon-daemon.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/recon-daemon.err.log</string>
+</dict>
+</plist>
+```
+
+Replace `YOUR_USERNAME` with your macOS short name. Then load it:
+
+```bash
+launchctl load -w ~/Library/LaunchAgents/com.recon.daemon.plist
+launchctl list | grep com.recon.daemon                # check it's running
+tail -f /tmp/recon-daemon.err.log                     # follow logs
+```
+
+To stop or remove it:
+
+```bash
+launchctl unload -w ~/Library/LaunchAgents/com.recon.daemon.plist
+```
+
+LaunchAgents run as your user when you log in, which is required so the daemon can reach your tmux server.
 
 ### Keybindings — Table View
 

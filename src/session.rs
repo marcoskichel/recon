@@ -108,6 +108,7 @@ pub struct Session {
     pub jsonl_path: PathBuf,
     pub last_file_size: u64,
     pub tags: HashMap<String, String>,
+    pub last_user_prompt: Option<String>,
 }
 
 impl Session {
@@ -231,6 +232,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                             prev.and_then(|s| s.model.clone()),
                             prev.and_then(|s| s.effort.clone()),
                             prev.and_then(|s| s.last_activity.clone()),
+                            prev.and_then(|s| s.last_user_prompt.clone()),
                         );
                         let cwd = info.cwd
                             .or_else(|| prev.map(|s| s.cwd.clone()))
@@ -247,6 +249,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                         existing.last_activity = info.last_activity;
                         existing.jsonl_path = path;
                         existing.last_file_size = info.file_size;
+                        existing.last_user_prompt = info.last_user_prompt;
                     }
                 }
                 continue;
@@ -262,6 +265,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 prev.and_then(|s| s.model.clone()),
                 prev.and_then(|s| s.effort.clone()),
                 prev.and_then(|s| s.last_activity.clone()),
+                prev.and_then(|s| s.last_user_prompt.clone()),
             );
 
             let cwd = info
@@ -299,6 +303,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 jsonl_path: path,
                 last_file_size: info.file_size,
                 tags,
+                last_user_prompt: info.last_user_prompt,
             });
         }
     }
@@ -362,6 +367,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 prev.and_then(|s| s.model.clone()),
                 prev.and_then(|s| s.effort.clone()),
                 prev.and_then(|s| s.last_activity.clone()),
+                prev.and_then(|s| s.last_user_prompt.clone()),
             );
 
             let cwd = info.cwd.clone().unwrap_or_else(|| live.pane_cwd.clone());
@@ -394,6 +400,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 jsonl_path: path,
                 last_file_size: info.file_size,
                 tags,
+                last_user_prompt: info.last_user_prompt,
             });
         } else {
             // No JSONL found — brand-new session, show as New placeholder
@@ -418,17 +425,20 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 jsonl_path: PathBuf::new(),
                 last_file_size: 0,
                 tags,
+                last_user_prompt: None,
             });
         }
     }
 
-    // Sort by last activity at minute resolution (most recent first),
-    // then by started_at as tiebreaker. Truncating to the minute prevents
-    // the table from reordering on every poll cycle.
+    // Stable order: tmux pane_target (session:window.pane), then started_at, then session_id.
+    // Doesn't reshuffle when activity timestamps change.
     sessions.sort_by(|a, b| {
-        truncate_to_minute(&b.last_activity)
-            .cmp(&truncate_to_minute(&a.last_activity))
-            .then(b.started_at.cmp(&a.started_at))
+        a.pane_target
+            .as_deref()
+            .unwrap_or("")
+            .cmp(b.pane_target.as_deref().unwrap_or(""))
+            .then(a.started_at.cmp(&b.started_at))
+            .then(a.session_id.cmp(&b.session_id))
     });
     sessions
 }
@@ -498,6 +508,7 @@ struct ParsedInfo {
     cwd: Option<String>,
     last_activity: Option<String>,
     file_size: u64,
+    last_user_prompt: Option<String>,
 }
 
 use std::sync::Mutex;
@@ -664,6 +675,10 @@ struct JsonlEntry {
     timestamp: Option<String>,
     #[serde(default)]
     cwd: Option<String>,
+    #[serde(default, rename = "isMeta")]
+    is_meta: Option<bool>,
+    #[serde(default, rename = "toolUseResult")]
+    tool_use_result: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -672,6 +687,8 @@ struct MessageEntry {
     model: Option<String>,
     #[serde(default)]
     usage: Option<UsageEntry>,
+    #[serde(default)]
+    content: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -686,6 +703,55 @@ struct UsageEntry {
     cache_read_input_tokens: u64,
 }
 
+/// Returns true if a user prompt is "substantive" — likely conveys task content
+/// rather than being a continuation/affirmation/slash-command/system marker.
+fn is_substantive_prompt(content: &str) -> bool {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed.starts_with("<command-name>")
+        || trimmed.starts_with("<local-command-stdout>")
+        || trimmed.starts_with("<local-command-caveat>")
+        || trimmed.starts_with("Caveat:")
+        || trimmed.starts_with("This session is being continued")
+        || trimmed.starts_with("[Request interrupted")
+    {
+        return false;
+    }
+
+    let cleaned = trimmed
+        .split_whitespace()
+        .filter(|w| !w.starts_with("[Image") && !w.starts_with("<command-"))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let lower = cleaned
+        .to_lowercase()
+        .trim_matches(|c: char| !c.is_alphanumeric())
+        .to_string();
+
+    const STOPLIST: &[&str] = &[
+        "continue", "contiue", "yes", "y", "yep", "yeah",
+        "no", "n", "nope",
+        "ok", "okay", "k", "kk",
+        "sure", "retry", "go", "go ahead", "yes go ahead",
+        "yes please", "go for it", "do it", "fix it",
+        "please", "thanks", "ty", "thx", "thank you",
+        "hmm", "what", "try again", "looks good", "all good",
+        "perfect", "great", "nice", "cool", "awesome",
+        "i approve", "i apoprove", "approved", "approve",
+        "keep going", "next", "more", "good",
+    ];
+    if STOPLIST.contains(&lower.as_str()) {
+        return false;
+    }
+
+    let word_count = cleaned.split_whitespace().count();
+    let char_count = cleaned.chars().count();
+    word_count >= 4 || char_count >= 20
+}
+
 /// Parse JSONL file, incrementally if possible.
 fn parse_jsonl(
     path: &Path,
@@ -695,6 +761,7 @@ fn parse_jsonl(
     prev_model: Option<String>,
     prev_effort: Option<String>,
     prev_activity: Option<String>,
+    prev_last_user_prompt: Option<String>,
 ) -> ParsedInfo {
     let file = match fs::File::open(path) {
         Ok(f) => f,
@@ -707,6 +774,7 @@ fn parse_jsonl(
                 cwd: None,
                 last_activity: prev_activity,
                 file_size: 0,
+                last_user_prompt: prev_last_user_prompt,
             }
         }
     };
@@ -722,6 +790,7 @@ fn parse_jsonl(
             cwd: None,
             last_activity: prev_activity,
             file_size,
+            last_user_prompt: prev_last_user_prompt,
         };
     }
 
@@ -732,6 +801,7 @@ fn parse_jsonl(
     let mut effort = prev_effort;
     let mut last_activity = prev_activity;
     let mut cwd = None;
+    let mut last_user_prompt = prev_last_user_prompt;
 
     if prev_file_size > 0 {
         let _ = reader.seek(SeekFrom::Start(prev_file_size));
@@ -741,6 +811,7 @@ fn parse_jsonl(
         model = None;
         effort = None;
         last_activity = None;
+        last_user_prompt = None;
     }
 
     let mut line = String::new();
@@ -783,11 +854,23 @@ fn parse_jsonl(
             }
         } else if trimmed.contains("\"type\":\"user\"") || trimmed.contains("\"type\":\"system\"") {
             if let Ok(entry) = serde_json::from_str::<JsonlEntry>(trimmed) {
-                if let Some(ts) = entry.timestamp {
-                    last_activity = Some(ts);
+                if let Some(ref ts) = entry.timestamp {
+                    last_activity = Some(ts.clone());
                 }
                 if entry.cwd.is_some() {
-                    cwd = entry.cwd;
+                    cwd = entry.cwd.clone();
+                }
+                if entry.is_meta != Some(true) && entry.tool_use_result.is_none() {
+                    if let Some(content) = entry
+                        .message
+                        .as_ref()
+                        .and_then(|m| m.content.as_ref())
+                        .and_then(|c| c.as_str())
+                    {
+                        if is_substantive_prompt(content) {
+                            last_user_prompt = Some(content.to_string());
+                        }
+                    }
                 }
             }
             // Extract model + effort from /model command stdout recorded in JSONL:
@@ -845,6 +928,7 @@ fn parse_jsonl(
         cwd,
         last_activity,
         file_size,
+        last_user_prompt,
     }
 }
 

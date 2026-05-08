@@ -11,7 +11,12 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     /// Open the visual (tamagotchi) dashboard
-    View,
+    View {
+        /// Compact mode: render single-room view filling the pane (no 2x2 grid, no zoom prompts).
+        /// Auto-selects the room matching the current tmux session.
+        #[arg(long)]
+        compact: bool,
+    },
     /// Interactive form to create a new tmux session
     New,
     /// Create a new claude session (background by default)
@@ -56,4 +61,12 @@ pub enum Command {
     Park,
     /// Restore previously parked sessions
     Unpark,
+    /// Run the summarizer continuously in the background.
+    /// Polls active claude sessions every interval, enqueues new transcripts
+    /// to the local LLM, persists labels to ~/.cache/recon/labels.
+    Daemon {
+        /// Poll interval seconds (default 10).
+        #[arg(long, default_value_t = 10u64)]
+        interval: u64,
+    },
 }

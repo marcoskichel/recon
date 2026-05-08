@@ -5,6 +5,7 @@ mod model;
 mod new_session;
 mod park;
 mod session;
+mod summarizer;
 mod tmux;
 mod ui;
 mod view_ui;
@@ -101,27 +102,42 @@ fn main() -> io::Result<()> {
         Some(Command::Unpark) => {
             park::unpark();
         }
-        Some(Command::View) | None => {
-            let start_mode = if matches!(cli.command, Some(Command::View)) {
-                ViewMode::View
-            } else {
-                ViewMode::Table
-            };
-            run_tui(start_mode)?;
+        Some(Command::Daemon { interval }) => {
+            run_daemon(interval);
+        }
+        Some(Command::View { compact }) => {
+            run_tui(ViewMode::View, compact)?;
+        }
+        None => {
+            run_tui(ViewMode::Table, false)?;
         }
     }
 
     Ok(())
 }
 
-fn run_tui(start_mode: ViewMode) -> io::Result<()> {
+fn run_daemon(interval_secs: u64) {
+    let mut app = App::new();
+    if !app.summarizer.enabled() {
+        eprintln!("recon daemon: summarizer disabled (no Ollama and no ANTHROPIC_API_KEY).");
+        std::process::exit(1);
+    }
+    eprintln!("recon daemon: polling every {}s. Ctrl-C to stop.", interval_secs);
+    let interval = Duration::from_secs(interval_secs.max(2));
+    loop {
+        app.refresh();
+        std::thread::sleep(interval);
+    }
+}
+
+fn run_tui(start_mode: ViewMode, compact: bool) -> io::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_app(&mut terminal, start_mode);
+    let result = run_app(&mut terminal, start_mode, compact);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -134,9 +150,14 @@ fn run_tui(start_mode: ViewMode) -> io::Result<()> {
     Ok(())
 }
 
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, start_mode: ViewMode) -> io::Result<()> {
+fn run_app(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    start_mode: ViewMode,
+    compact: bool,
+) -> io::Result<()> {
     let mut app = App::new();
     app.view_mode = start_mode;
+    app.view_compact = compact;
     app.refresh();
 
     let refresh_interval = Duration::from_secs(2);

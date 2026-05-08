@@ -16,8 +16,9 @@ const ROOMS_PER_PAGE: usize = 4;
 const SPRITE_W: usize = 10; // pixel columns
 const SPRITE_H: usize = 10; // pixel rows
 const SPRITE_RENDER_H: u16 = (SPRITE_H as u16 + 1) / 2; // terminal lines for sprite (5)
-const CHAR_WIDTH: u16 = (SPRITE_W as u16) + 4; // sprite + padding
-const CHAR_LABEL_LINES: u16 = 4; // name + branch + status + context bar
+const CHAR_WIDTH: u16 = (SPRITE_W as u16) + 30; // sprite + padding (wider for label legibility)
+const NAME_LINES: u16 = 3; // wrap label across this many lines
+const CHAR_LABEL_LINES: u16 = NAME_LINES + 2; // name(NAME_LINES) + branch + context bar
 const CHAR_HEIGHT: u16 = SPRITE_RENDER_H + CHAR_LABEL_LINES;
 
 // ── Pixel sprite data ────────────────────────────────────────────────
@@ -358,6 +359,26 @@ pub fn resolve_zoom(app: &mut App) {
         app.view_page = 0;
     }
 
+    if app.view_compact && app.view_zoomed_room.is_none() {
+        let current = crate::tmux::current_session_name();
+        let picked = current
+            .as_ref()
+            .and_then(|name| {
+                rooms.iter().find(|r| {
+                    r.session_indices.iter().any(|&i| {
+                        app.sessions
+                            .get(i)
+                            .and_then(|s| s.tmux_session.as_deref())
+                            == Some(name.as_str())
+                    })
+                })
+            })
+            .or_else(|| rooms.first());
+        if let Some(room) = picked {
+            app.view_zoomed_room = Some(room.name.clone());
+        }
+    }
+
     if let Some(idx) = app.view_zoom_index.take() {
         let page_start = app.view_page * ROOMS_PER_PAGE;
         if let Some(room) = rooms.get(page_start + idx) {
@@ -529,12 +550,12 @@ fn render_room(frame: &mut Frame, app: &App, room: &Room, area: Rect, slot_num: 
             }
             let flat_idx = row_idx * chars_per_row + col_idx;
             let is_selected = selected_agent == Some(flat_idx);
-            render_character(frame, &app.sessions[session_idx], h_chunks[col_idx], app.tick, is_selected);
+            render_character(frame, app, &app.sessions[session_idx], h_chunks[col_idx], app.tick, is_selected);
         }
     }
 }
 
-fn render_character(frame: &mut Frame, session: &Session, area: Rect, tick: u64, is_selected: bool) {
+fn render_character(frame: &mut Frame, app: &App, session: &Session, area: Rect, tick: u64, is_selected: bool) {
     if area.height < 3 || area.width < 4 {
         return;
     }
@@ -543,12 +564,6 @@ fn render_character(frame: &mut Frame, session: &Session, area: Rect, tick: u64,
     let anim_frame = animation_frame(&session.status, tick + offset);
     let (sprite, palette) = sprite_data(&session.status, anim_frame);
     let ratio = session.token_ratio();
-
-    let color = if session.status == SessionStatus::Input {
-        if tick % 2 == 0 { Color::Yellow } else { Color::White }
-    } else {
-        status_color(&session.status)
-    };
 
     // Selection highlight background
     if is_selected {
@@ -563,29 +578,39 @@ fn render_character(frame: &mut Frame, session: &Session, area: Rect, tick: u64,
     let sprite_lines = render_sprite_lines(sprite, palette);
     lines.extend(sprite_lines);
 
-    // Session name
-    let name = session.tmux_session.as_deref().unwrap_or("???");
+    // Label priority: LLM summary > last user prompt > tmux session name
+    let summary_owned = app
+        .summarizer
+        .store
+        .get(&session.session_id)
+        .map(|s: String| sanitize_prompt(s.as_str()))
+        .filter(|s| !s.is_empty());
+    let prompt_owned = session
+        .last_user_prompt
+        .as_deref()
+        .map(sanitize_prompt)
+        .filter(|s| !s.is_empty());
+    let name = summary_owned
+        .as_deref()
+        .or(prompt_owned.as_deref())
+        .or(session.tmux_session.as_deref())
+        .unwrap_or("???");
     let name_style = if is_selected {
         Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
     };
-    lines.push(Line::from(Span::styled(
-        truncate_str(name, area.width as usize),
-        name_style,
-    )));
+    let name_lines = wrap_label(name, area.width as usize, NAME_LINES as usize);
+    for i in 0..(NAME_LINES as usize) {
+        let text = name_lines.get(i).cloned().unwrap_or_default();
+        lines.push(Line::from(Span::styled(text, name_style)));
+    }
 
     // Git branch
     let branch = session.branch.as_deref().unwrap_or("");
     lines.push(Line::from(Span::styled(
         truncate_str(branch, area.width as usize),
         Style::default().fg(Color::Green),
-    )));
-
-    // Status label
-    lines.push(Line::from(Span::styled(
-        session.status.label(),
-        Style::default().fg(color),
     )));
 
     // Context bar
@@ -630,8 +655,10 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" kill  "));
         spans.push(Span::styled("n", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" new  "));
-        spans.push(Span::styled("Esc", Style::default().fg(Color::Cyan)));
-        spans.push(Span::raw(" back  "));
+        if !app.view_compact {
+            spans.push(Span::styled("Esc", Style::default().fg(Color::Cyan)));
+            spans.push(Span::raw(" back  "));
+        }
     } else {
         spans.push(Span::styled("1-4", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" zoom  "));
@@ -655,6 +682,85 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+fn sanitize_prompt(raw: &str) -> String {
+    let collapsed: String = raw
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    collapsed.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn wrap_label(text: &str, max_width: usize, max_lines: usize) -> Vec<String> {
+    if max_width == 0 || max_lines == 0 {
+        return Vec::new();
+    }
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() {
+        return Vec::new();
+    }
+
+    let mut lines: Vec<String> = Vec::with_capacity(max_lines);
+    let mut current = String::new();
+
+    for w in &words {
+        let word_chars = w.chars().count();
+        let cur_chars = current.chars().count();
+        let needed = if cur_chars == 0 { word_chars } else { cur_chars + 1 + word_chars };
+
+        if needed <= max_width {
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(w);
+            continue;
+        }
+
+        if cur_chars > 0 {
+            lines.push(std::mem::take(&mut current));
+            if lines.len() == max_lines {
+                break;
+            }
+        }
+
+        if word_chars <= max_width {
+            current.push_str(w);
+        } else {
+            let chunk: String = w.chars().take(max_width).collect();
+            current = chunk;
+        }
+    }
+
+    if lines.len() < max_lines && !current.is_empty() {
+        lines.push(std::mem::take(&mut current));
+    }
+
+    let total_chars: usize = words.iter().map(|w| w.chars().count()).sum::<usize>()
+        + words.len().saturating_sub(1);
+    let used_chars: usize = lines.iter().map(|l| l.chars().count()).sum::<usize>()
+        + lines.len().saturating_sub(1);
+
+    if used_chars < total_chars {
+        if let Some(last) = lines.last_mut() {
+            if last.chars().count() == max_width {
+                let mut chars: Vec<char> = last.chars().collect();
+                if chars.len() > 1 {
+                    chars.pop();
+                }
+                chars.push('\u{2026}');
+                *last = chars.into_iter().collect();
+            } else {
+                last.push('\u{2026}');
+                if last.chars().count() > max_width {
+                    let truncated: String = last.chars().take(max_width).collect();
+                    *last = truncated;
+                }
+            }
+        }
+    }
+
+    lines
+}
 
 fn truncate_str(s: &str, max_width: usize) -> String {
     let char_count: usize = s.chars().count();
@@ -693,6 +799,7 @@ mod tests {
             jsonl_path: PathBuf::new(),
             last_file_size: 0,
             tags: std::collections::HashMap::new(),
+            last_user_prompt: None,
         }
     }
 

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::session::{self, Session};
+use crate::summarizer::Summarizer;
 use crate::tmux;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -24,6 +25,8 @@ pub struct App {
     pub filter_active: bool,              // search input has focus
     pub filter_text: String,              // current search query
     pub filter_cursor: usize,             // cursor position in query
+    pub view_compact: bool,               // single-room compact layout
+    pub summarizer: Summarizer,
     prev_sessions: HashMap<String, Session>,
 }
 
@@ -42,6 +45,8 @@ impl App {
             filter_active: false,
             filter_text: String::new(),
             filter_cursor: 0,
+            view_compact: false,
+            summarizer: Summarizer::start(),
             prev_sessions: HashMap::new(),
         }
     }
@@ -56,6 +61,13 @@ impl App {
             .iter()
             .map(|s| (s.session_id.clone(), s.clone()))
             .collect();
+
+        for s in &sessions {
+            if !s.jsonl_path.as_os_str().is_empty() {
+                self.summarizer
+                    .maybe_enqueue(&s.session_id, &s.jsonl_path, s.last_file_size);
+            }
+        }
 
         self.sessions = sessions;
 
@@ -239,7 +251,7 @@ impl App {
             }
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Esc => {
-                if self.view_zoomed_room.is_some() {
+                if self.view_zoomed_room.is_some() && !self.view_compact {
                     self.view_zoomed_room = None;
                     self.view_selected_agent = 0;
                 } else if !self.filter_text.is_empty() {
@@ -441,6 +453,8 @@ impl App {
                     "last_activity": s.last_activity,
                     "started_at": s.started_at,
                     "tags": s.tags,
+                    "last_user_prompt": s.last_user_prompt,
+                    "summary": self.summarizer.store.get(&s.session_id),
                 })
             })
             .collect();

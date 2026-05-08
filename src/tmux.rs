@@ -118,6 +118,26 @@ pub fn resume_session(session_id: &str, name: Option<&str>) -> Result<String, St
     Ok(session_name)
 }
 
+/// Returns the tmux session name of the current pane (when running inside tmux).
+pub fn current_session_name() -> Option<String> {
+    if std::env::var("TMUX").is_err() {
+        return None;
+    }
+    let output = std::process::Command::new("tmux")
+        .args(["display-message", "-p", "#{session_name}"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
 /// Get default session name and cwd for a new session.
 pub fn default_new_session_info() -> (String, String) {
     let cwd = std::env::current_dir()
