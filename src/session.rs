@@ -530,7 +530,7 @@ struct BranchInfo {
 static STABLE_GIT_CACHE: Mutex<Option<HashMap<String, StableGitInfo>>> = Mutex::new(None);
 static BRANCH_CACHE: Mutex<Option<HashMap<String, BranchInfo>>> = Mutex::new(None);
 
-const BRANCH_CACHE_TTL: Duration = Duration::from_secs(30);
+const BRANCH_CACHE_TTL: Duration = Duration::from_secs(300);
 
 /// Get the git project name, relative_dir, and branch for a directory.
 ///
@@ -538,7 +538,7 @@ const BRANCH_CACHE_TTL: Duration = Duration::from_secs(30);
 /// repeated TCC prompts on macOS for git/canonicalize syscalls.
 /// branch can change at runtime — refreshed every 30s.
 fn git_project_info(cwd: &str) -> (String, Option<String>, Option<String>) {
-    if !validate_cwd(cwd) {
+    if !Path::new(cwd).is_absolute() {
         let fallback = Path::new(cwd)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
