@@ -45,12 +45,14 @@ Process-to-session matching uses `~/.claude/sessions/{PID}.json` files written b
 
 ### Module roles
 
-- **session.rs** — all discovery, parsing, and status logic (~660 lines, the core)
-- **app.rs** — state container, refresh loop, key handling, JSON serialization
-- **ui.rs** — ratatui rendering (table, status dots, color coding)
-- **tmux.rs** — session creation, switching, name sanitization
-- **model.rs** — model ID → display name/context window mapping
-- **new_session.rs** — interactive two-field form for creating sessions
+- **session.rs** — all discovery, parsing, and status logic (the core)
+- **app.rs** — state container, refresh loop, key handling
+- **view_ui.rs** — ratatui rendering (compact view, agent cards, rooms)
+- **tmux.rs** — session creation, switching, kill, name sanitization
+- **model.rs** — model ID → context window mapping
+- **summarizer.rs** — background LLM labeller (Ollama or Anthropic) feeding agent-card labels
+- **view_lock.rs** — pidfile so daemon pauses while TUI is active
+- **cli.rs** — clap definitions: `recon` (TUI) and `recon daemon`
 
 ### Key caches
 

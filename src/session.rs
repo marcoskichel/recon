@@ -107,7 +107,6 @@ pub struct Session {
     pub started_at: u64,
     pub jsonl_path: PathBuf,
     pub last_file_size: u64,
-    pub tags: HashMap<String, String>,
     pub last_user_prompt: Option<String>,
 }
 
@@ -120,16 +119,6 @@ impl Session {
             Some(dir) => format!("{} \u{203A} {}", self.project_name, dir),
             None => self.project_name.clone(),
         }
-    }
-
-    pub fn token_display(&self) -> String {
-        let used = self.total_input_tokens + self.total_output_tokens;
-        let window = self
-            .model
-            .as_deref()
-            .map(model::context_window)
-            .unwrap_or(200_000);
-        format!("{}k / {}", used / 1000, format_window(window))
     }
 
     pub fn token_ratio(&self) -> f64 {
@@ -145,24 +134,23 @@ impl Session {
         used as f64 / window as f64
     }
 
-    pub fn model_display(&self) -> String {
-        match &self.model {
-            Some(m) => model::format_with_effort(m, self.effort.as_deref().unwrap_or("")),
-            None => "—".to_string(),
-        }
-    }
-}
-
-pub fn format_window(tokens: u64) -> String {
-    if tokens >= 1_000_000 {
-        format!("{}M", tokens / 1_000_000)
-    } else {
-        format!("{}k", tokens / 1000)
-    }
 }
 
 /// Discover sessions by scanning JSONL files, then matching to live tmux panes.
+///
+/// `enrich_git` controls whether project_name/branch/relative_dir are populated
+/// via git invocations on each session's CWD. The view needs them for display;
+/// the daemon does not (it only feeds JSONL contents to the summarizer).
+/// Skipping git in daemon mode avoids running `git -C <user-cwd>` per session,
+/// which on macOS triggers TCC prompts whenever a CWD lives under a protected
+/// directory (Documents, Desktop, Downloads, iCloud, external volumes).
 pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Session> {
+    discover_sessions_inner(prev_sessions)
+}
+
+fn discover_sessions_inner(
+    prev_sessions: &HashMap<String, Session>,
+) -> Vec<Session> {
     let claude_dir = match dirs::home_dir() {
         Some(h) => h.join(".claude").join("projects"),
         None => return vec![],
@@ -286,7 +274,6 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
 
             matched_session_ids.insert(session_id.clone());
 
-            let tags = read_tmux_tags(&live.tmux_session);
             sessions.push(Session {
                 session_id,
                 project_name,
@@ -305,7 +292,6 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 started_at: live.started_at,
                 jsonl_path: path,
                 last_file_size: info.file_size,
-                tags,
                 last_user_prompt: info.last_user_prompt,
             });
         }
@@ -383,7 +369,6 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 Some(&live.pane_target),
             );
 
-            let tags = read_tmux_tags(&live.tmux_session);
             sessions.push(Session {
                 session_id: session_id_key.clone(),
                 project_name,
@@ -402,13 +387,11 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 started_at: live.started_at,
                 jsonl_path: path,
                 last_file_size: info.file_size,
-                tags,
                 last_user_prompt: info.last_user_prompt,
             });
         } else {
             // No JSONL found — brand-new session, show as New placeholder
             let (project_name, relative_dir, branch) = git_project_info(&live.pane_cwd);
-            let tags = read_tmux_tags(&live.tmux_session);
             sessions.push(Session {
                 session_id: session_id_key.clone(),
                 project_name,
@@ -427,7 +410,6 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 started_at: live.started_at,
                 jsonl_path: PathBuf::new(),
                 last_file_size: 0,
-                tags,
                 last_user_prompt: None,
             });
         }
@@ -444,12 +426,6 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
             .then(a.session_id.cmp(&b.session_id))
     });
     sessions
-}
-
-/// Truncate an ISO timestamp to minute resolution for stable sorting.
-/// "2026-03-19T21:25:34.098Z" → Some("2026-03-19T21:25")
-fn truncate_to_minute(ts: &Option<String>) -> Option<String> {
-    ts.as_ref().map(|s| s.get(..16).unwrap_or(s).to_string())
 }
 
 /// Info about a live claude session, built from tmux + session files.
@@ -997,17 +973,6 @@ fn read_tmux_env(session_name: &str, var: &str) -> Option<String> {
     line.trim().split_once('=').map(|(_, v)| v.to_string())
 }
 
-/// Read RECON_TAGS from a tmux session's environment and parse into key:value pairs.
-fn read_tmux_tags(session_name: &str) -> HashMap<String, String> {
-    read_tmux_env(session_name, "RECON_TAGS")
-        .map(|val| {
-            val.split(',')
-                .filter_map(|tag| tag.split_once(':').map(|(k, v)| (k.to_string(), v.to_string())))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// Parse `--resume <session-id>` from the process command line via ps.
 /// Fallback for sessions not created by `recon --resume`.
 fn parse_resume_id_from_ps(pid: i32) -> Option<String> {
@@ -1072,64 +1037,6 @@ fn find_jsonl_by_session_id(session_id: &str) -> Option<PathBuf> {
     best.map(|(p, _)| p)
 }
 
-/// Find the cwd used by an existing session (by scanning its JSONL for a cwd entry).
-/// Used by the resume command to start the tmux session in the right directory.
-/// Return session-id → tmux info for all currently live claude sessions.
-/// Used by the resume picker to filter out still-running sessions.
-pub fn build_live_session_map_public() -> HashMap<String, String> {
-    build_live_session_map()
-        .into_iter()
-        .map(|(id, info)| (id, info.tmux_session))
-        .collect()
-}
-
-/// Check if a session ID (JSONL-based) is already running in tmux.
-/// Returns the pane target (session:window.pane) if found.
-pub fn find_live_tmux_for_session(session_id: &str) -> Option<String> {
-    let live_map = build_live_session_map();
-
-    // Direct match: PID file's session_id == the one we're looking for.
-    if let Some(info) = live_map.get(session_id) {
-        return Some(info.pane_target.clone());
-    }
-
-    // Resumed session: RECON_RESUMED_FROM env var matches.
-    for (_, info) in &live_map {
-        if let Some(orig_id) = read_tmux_env(&info.tmux_session, "RECON_RESUMED_FROM") {
-            if orig_id == session_id {
-                return Some(info.pane_target.clone());
-            }
-        }
-    }
-
-    None
-}
-
-pub fn find_session_cwd(session_id: &str) -> Option<String> {
-    let projects_dir = dirs::home_dir()?.join(".claude").join("projects");
-    for entry in fs::read_dir(&projects_dir).ok()?.flatten() {
-        let jsonl_path = entry.path().join(format!("{session_id}.jsonl"));
-        if !jsonl_path.exists() {
-            continue;
-        }
-        let file = fs::File::open(&jsonl_path).ok()?;
-        let mut reader = BufReader::new(file);
-        let mut line = String::new();
-        for _ in 0..20 {
-            line.clear();
-            match read_line_capped(&mut reader, &mut line) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {}
-            }
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
-                if let Some(cwd) = v.get("cwd").and_then(|c| c.as_str()) {
-                    return Some(cwd.to_string());
-                }
-            }
-        }
-    }
-    None
-}
 
 /// Determine session status from file recency and token counts.
 /// - New: no tokens yet (never interacted)

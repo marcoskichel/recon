@@ -1,13 +1,9 @@
 mod app;
 mod cli;
-mod history;
 mod model;
-mod new_session;
-mod park;
 mod session;
 mod summarizer;
 mod tmux;
-mod ui;
 mod view_lock;
 mod view_ui;
 
@@ -26,7 +22,7 @@ use crossterm::{
 use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 
-use app::{App, ViewMode};
+use app::App;
 use cli::{Cli, Command};
 use session::Session;
 
@@ -34,91 +30,12 @@ fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Command::New) => {
-            let result = new_session::run_new_session_form()?;
-            if let Some(name) = result {
-                tmux::switch_to_pane(&name);
-            }
-        }
-        Some(Command::Launch { name, cwd, command, attach, tag }) => {
-            let (default_name, default_cwd) = tmux::default_new_session_info();
-            let session_name = name.as_deref().unwrap_or(&default_name);
-            let session_cwd = cwd.as_deref().unwrap_or(&default_cwd);
-            match tmux::create_session(session_name, session_cwd, command.as_deref(), &tag) {
-                Ok(name) => {
-                    if attach {
-                        tmux::switch_to_pane(&name);
-                    }
-                    eprintln!("Session: {name}");
-                }
-                Err(e) => {
-                    eprintln!("Error: {e}");
-                    std::process::exit(1);
-                }
-            }
-        }
-        Some(Command::Resume { id, name, no_attach }) => {
-            if let Some(session_id) = id {
-                match tmux::resume_session(&session_id, name.as_deref()) {
-                    Ok(sess) => {
-                        if !no_attach {
-                            tmux::switch_to_pane(&sess);
-                        }
-                        eprintln!("Resumed in session: {sess}");
-                    }
-                    Err(e) => {
-                        eprintln!("Error: {e}");
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                let result = history::run_resume_picker()?;
-                if let Some((session_id, sess_name)) = result {
-                    match tmux::resume_session(&session_id, Some(&sess_name)) {
-                        Ok(sess) => {
-                            tmux::switch_to_pane(&sess);
-                            eprintln!("Resumed in session: {sess}");
-                        }
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            std::process::exit(1);
-                        }
-                    }
-                }
-            }
-        }
-        Some(Command::Next) => {
-            let mut app = App::new();
-            app.refresh();
-            if let Some(session) = app.sessions.iter().find(|s| s.status == session::SessionStatus::Input) {
-                if let Some(target) = &session.pane_target {
-                    tmux::switch_to_pane(target);
-                }
-            }
-        }
-        Some(Command::Json { tag }) => {
-            let mut app = App::new();
-            app.refresh();
-            println!("{}", app.to_json(&tag));
-        }
-        Some(Command::Park) => {
-            park::park();
-        }
-        Some(Command::Unpark) => {
-            park::unpark();
-        }
         Some(Command::Daemon { interval }) => {
             run_daemon(interval);
+            Ok(())
         }
-        Some(Command::View { compact }) => {
-            run_tui(ViewMode::View, compact)?;
-        }
-        None => {
-            run_tui(ViewMode::Table, false)?;
-        }
+        None => run_tui(),
     }
-
-    Ok(())
 }
 
 fn run_daemon(interval_secs: u64) {
@@ -147,12 +64,8 @@ fn run_daemon(interval_secs: u64) {
     }
 }
 
-fn run_tui(start_mode: ViewMode, compact: bool) -> io::Result<()> {
-    let _view_lock = if start_mode == ViewMode::View {
-        view_lock::ViewLock::acquire()
-    } else {
-        None
-    };
+fn run_tui() -> io::Result<()> {
+    let _view_lock = view_lock::ViewLock::acquire();
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -160,7 +73,7 @@ fn run_tui(start_mode: ViewMode, compact: bool) -> io::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_app(&mut terminal, start_mode, compact);
+    let result = run_app(&mut terminal);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -173,14 +86,8 @@ fn run_tui(start_mode: ViewMode, compact: bool) -> io::Result<()> {
     Ok(())
 }
 
-fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    start_mode: ViewMode,
-    compact: bool,
-) -> io::Result<()> {
+fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
     let mut app = App::new();
-    app.view_mode = start_mode;
-    app.view_compact = compact;
     app.refresh();
 
     let (tx, rx) = mpsc::channel::<Vec<Session>>();
@@ -188,16 +95,8 @@ fn run_app(
     thread::spawn(move || run_refresh_worker(tx, initial_prev));
 
     loop {
-        if app.view_mode == ViewMode::View {
-            view_ui::resolve_zoom(&mut app);
-        }
-        terminal.draw(|f| {
-            match app.view_mode {
-                ViewMode::Table => ui::render(f, &app),
-                ViewMode::View => view_ui::render(f, &app),
-            }
-        })?;
-
+        view_ui::resolve_zoom(&mut app);
+        terminal.draw(|f| view_ui::render(f, &app))?;
         app.advance_tick();
 
         if event::poll(Duration::from_millis(100))? {
