@@ -593,10 +593,20 @@ fn call_claude_cli(
     use std::io::Write;
     use std::process::{Command, Stdio};
 
+    // Block all MCP servers and project/local settings to prevent claude from
+    // loading user-configured MCP integrations (e.g. filesystem crawlers) that
+    // would spawn under the daemon's launchd context and trigger macOS TCC
+    // prompts for protected directories. Skills/hooks/plugins are also disabled
+    // here via empty mcp-config + strict-mcp-config + scoped setting-sources.
     let mut child = Command::new(binary)
         .args([
             "--print",
             "--no-session-persistence",
+            "--strict-mcp-config",
+            "--mcp-config",
+            r#"{"mcpServers":{}}"#,
+            "--setting-sources",
+            "user",
             "--model",
             model,
             "--system-prompt",
