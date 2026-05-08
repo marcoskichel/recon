@@ -40,7 +40,12 @@ type Palette = &'static [(u8, u8, u8)]; // index 0 unused (transparent)
 //   4: eye white          10: alert red mouth
 //   5: nose / tongue      11: closed-eye line
 //   6: ear / accent dark
-const SPECIES_COUNT: usize = 10;
+pub const SPECIES_COUNT: usize = 10;
+
+pub const SPECIES_NAMES: [&str; SPECIES_COUNT] = [
+    "Floppy", "Fox", "Blob", "Bolt", "Turtle",
+    "Wisp", "Penguin", "Sprout", "Beetle", "Shadow",
+];
 
 // Species 0: Floppy-ear pup (golden retriever vibe)
 const PAL_FLOPPY: &[(u8, u8, u8)] = &[
@@ -1281,12 +1286,38 @@ fn sprite_data(
     (sprite, pal)
 }
 
-fn pick_species(session_id: &str) -> usize {
+pub fn pick_species(session_id: &str) -> usize {
     // FNV-1a-style hash, distinct from session_phase_offset to avoid correlation.
     let h = session_id
         .bytes()
         .fold(2166136261u64, |a, b| (a ^ b as u64).wrapping_mul(16777619));
     (h as usize) % SPECIES_COUNT
+}
+
+pub fn agent_display_name(session: &Session, app: &App) -> String {
+    if let Some(custom) = app.custom_names.get(&session.session_id) {
+        return custom.clone();
+    }
+    let species = app.species_assignments
+        .get(&session.session_id)
+        .copied()
+        .unwrap_or_else(|| pick_species(&session.session_id));
+    let base_name = SPECIES_NAMES[species % SPECIES_COUNT];
+    let same_before = app.sessions.iter()
+        .take_while(|s| s.session_id != session.session_id)
+        .filter(|s| {
+            app.species_assignments
+                .get(&s.session_id)
+                .copied()
+                .unwrap_or_else(|| pick_species(&s.session_id))
+                == species
+        })
+        .count();
+    if same_before == 0 {
+        base_name.to_string()
+    } else {
+        format!("{} {}", base_name, same_before + 1)
+    }
 }
 
 // ── Half-block renderer ──────────────────────────────────────────────
@@ -1507,25 +1538,35 @@ pub fn resolve_zoom(app: &mut App) {
 
 pub fn render(frame: &mut Frame, app: &App) {
     let show_search = app.filter_active || !app.filter_text.is_empty();
-    let chunks = if show_search {
-        Layout::vertical([
+    let show_rename = app.rename_active;
+    let extra = (show_search as u16) + (show_rename as u16);
+    let chunks = match extra {
+        2 => Layout::vertical([
             Constraint::Min(1),
             Constraint::Length(1),
             Constraint::Length(1),
-        ])
-        .split(frame.area())
-    } else {
-        Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
-            .split(frame.area())
+            Constraint::Length(1),
+        ]).split(frame.area()),
+        1 => Layout::vertical([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ]).split(frame.area()),
+        _ => Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
+            .split(frame.area()),
     };
 
     render_rooms(frame, app, chunks[0]);
+    let mut next = 1usize;
     if show_search {
-        render_search_bar(frame, app, chunks[1]);
-        render_footer(frame, app, chunks[2]);
-    } else {
-        render_footer(frame, app, chunks[1]);
+        render_search_bar(frame, app, chunks[next]);
+        next += 1;
     }
+    if show_rename {
+        render_rename_bar(frame, app, chunks[next]);
+        next += 1;
+    }
+    render_footer(frame, app, chunks[next]);
 }
 
 fn render_search_bar(frame: &mut Frame, app: &App, area: Rect) {
@@ -1545,6 +1586,17 @@ fn render_search_bar(frame: &mut Frame, app: &App, area: Rect) {
 
     if app.filter_active {
         frame.set_cursor_position((area.x + 1 + app.filter_cursor as u16, area.y));
+    }
+}
+
+fn render_rename_bar(frame: &mut Frame, app: &App, area: Rect) {
+    let spans = vec![
+        Span::styled("Rename: ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw(&app.rename_text),
+    ];
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+    if app.rename_active {
+        frame.set_cursor_position((area.x + 8 + app.rename_cursor as u16, area.y));
     }
 }
 
@@ -1804,7 +1856,20 @@ fn render_character(
     let sprite_lines = render_sprite_lines(sprite, palette);
     lines.extend(sprite_lines);
 
-    // Label priority: LLM summary > last user prompt > tmux session name
+    // Species name — always shown in species primary color
+    let species = app.species_assignments.get(&session.session_id).copied()
+        .unwrap_or_else(|| pick_species(&session.session_id));
+    let (nr, ng, nb) = SPECIES_PALETTES[species % SPECIES_COUNT][1];
+    let display_name = agent_display_name(session, app);
+    let name_style = Style::default()
+        .fg(Color::Rgb(nr, ng, nb))
+        .add_modifier(Modifier::BOLD);
+    lines.push(Line::from(Span::styled(
+        truncate_str(&display_name, area.width as usize),
+        name_style,
+    )));
+
+    // Description — LLM summary or last prompt, shown only when summarizer enabled
     let summary_owned = app
         .summarizer
         .store
@@ -1816,19 +1881,28 @@ fn render_character(
         .as_deref()
         .map(sanitize_prompt)
         .filter(|s| !s.is_empty());
-    let name = summary_owned
-        .as_deref()
-        .or(prompt_owned.as_deref())
-        .or(session.tmux_session.as_deref())
-        .unwrap_or("???");
-    let name_style = if is_selected {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    let desc_style = if is_selected {
+        Style::default().fg(Color::Cyan)
     } else {
         Style::default().fg(Color::White)
     };
-    let name_lines = wrap_label(name, area.width as usize, NAME_LINES as usize);
-    for line in name_lines.iter().take(NAME_LINES as usize) {
-        lines.push(Line::from(Span::styled(line.clone(), name_style)));
+    if app.summarizer.enabled() {
+        let desc = summary_owned.as_deref().or(prompt_owned.as_deref());
+        if let Some(text) = desc {
+            let desc_lines = wrap_label(text, area.width as usize, 2);
+            for line in desc_lines.iter().take(2) {
+                lines.push(Line::from(Span::styled(line.clone(), desc_style)));
+            }
+            while lines.len() < 5 + 1 + 2 {
+                lines.push(Line::from(""));
+            }
+        } else {
+            lines.push(Line::from(""));
+            lines.push(Line::from(""));
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
     }
 
     // Git branch (no padding above — sits right under the name).
@@ -1965,7 +2039,16 @@ fn render_character_compact(
     let text_area = chunks[1];
     let text_w = text_area.width as usize;
 
-    // Label priority: LLM summary > last user prompt > tmux session name
+    // Species name — always shown in species primary color, bold
+    let species = app.species_assignments.get(&session.session_id).copied()
+        .unwrap_or_else(|| pick_species(&session.session_id));
+    let (nr, ng, nb) = SPECIES_PALETTES[species % SPECIES_COUNT][1];
+    let display_name = agent_display_name(session, app);
+    let name_style = Style::default()
+        .fg(Color::Rgb(nr, ng, nb))
+        .add_modifier(Modifier::BOLD);
+
+    // Description — LLM summary or last prompt, shown only when summarizer enabled
     let summary_owned = app
         .summarizer
         .store
@@ -1977,25 +2060,29 @@ fn render_character_compact(
         .as_deref()
         .map(sanitize_prompt)
         .filter(|s| !s.is_empty());
-    let name = summary_owned
-        .as_deref()
-        .or(prompt_owned.as_deref())
-        .or(session.tmux_session.as_deref())
-        .unwrap_or("???");
-    let name_style = Style::default()
-        .fg(Color::White)
-        .add_modifier(Modifier::BOLD);
-    let name_lines = wrap_label(name, text_w, 2);
+    let desc = if app.summarizer.enabled() {
+        summary_owned.as_deref().or(prompt_owned.as_deref())
+    } else {
+        None
+    };
 
     let branch = session.branch.as_deref().unwrap_or("");
     let timer = elapsed_hms(session.started_at);
     let status_label = session.status.label();
 
     let mut lines: Vec<Line> = Vec::new();
-    for line in name_lines.iter().take(2) {
-        lines.push(Line::from(Span::styled(line.clone(), name_style)));
-    }
-    while lines.len() < 2 {
+    lines.push(Line::from(Span::styled(
+        truncate_str(&display_name, text_w),
+        name_style,
+    )));
+    if let Some(text) = desc {
+        let desc_lines = wrap_label(text, text_w, 1);
+        let desc_line = desc_lines.into_iter().next().unwrap_or_default();
+        lines.push(Line::from(Span::styled(
+            desc_line,
+            Style::default().fg(Color::White),
+        )));
+    } else {
         lines.push(Line::from(""));
     }
     lines.push(Line::from(Span::styled(
@@ -2078,6 +2165,8 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" diffnav  "));
         spans.push(Span::styled("D", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" dash  "));
+        spans.push(Span::styled("r", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" rename  "));
     } else {
         spans.push(Span::styled("1-9", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" select  "));
@@ -2093,6 +2182,8 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw(" diffnav  "));
         spans.push(Span::styled("D", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" dash  "));
+        spans.push(Span::styled("r", Style::default().fg(Color::Cyan)));
+        spans.push(Span::raw(" rename  "));
     }
 
     spans.push(Span::styled("/", Style::default().fg(Color::Cyan)));

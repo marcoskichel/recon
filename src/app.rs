@@ -26,6 +26,12 @@ pub struct App {
     pub view_room_order: Vec<String>,
     pub summarizer: Summarizer,
     pub status_message: Option<(String, Instant)>,
+    pub species_assignments: HashMap<String, usize>,
+    pub custom_names: HashMap<String, String>,
+    pub rename_active: bool,
+    pub rename_session_id: Option<String>,
+    pub rename_text: String,
+    pub rename_cursor: usize,
     prev_sessions: HashMap<String, Session>,
 }
 
@@ -54,6 +60,12 @@ impl App {
             view_room_order: Vec::new(),
             summarizer,
             status_message: None,
+            species_assignments: HashMap::new(),
+            custom_names: HashMap::new(),
+            rename_active: false,
+            rename_session_id: None,
+            rename_text: String::new(),
+            rename_cursor: 0,
             prev_sessions: HashMap::new(),
         }
     }
@@ -92,12 +104,36 @@ impl App {
         }
 
         self.sessions = sessions;
+        self.assign_species_to_new_sessions();
 
         let count = self.filtered_indices().len();
         if count == 0 {
             self.selected = 0;
         } else if self.selected >= count {
             self.selected = count - 1;
+        }
+    }
+
+    fn assign_species_to_new_sessions(&mut self) {
+        use std::collections::HashSet;
+        let active_ids: HashSet<String> =
+            self.sessions.iter().map(|s| s.session_id.clone()).collect();
+        self.species_assignments.retain(|id, _| active_ids.contains(id));
+
+        let used: HashSet<usize> = self.species_assignments.values().copied().collect();
+        let mut available: Vec<usize> = (0..view_ui::SPECIES_COUNT)
+            .filter(|s| !used.contains(s))
+            .collect();
+
+        for session in &self.sessions {
+            if !self.species_assignments.contains_key(&session.session_id) {
+                let species = if !available.is_empty() {
+                    available.remove(0)
+                } else {
+                    view_ui::pick_species(&session.session_id)
+                };
+                self.species_assignments.insert(session.session_id.clone(), species);
+            }
         }
     }
 
@@ -142,6 +178,10 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
+        if self.rename_active {
+            self.handle_key_rename(key);
+            return;
+        }
         if self.filter_active {
             self.handle_key_filter(key);
             return;
@@ -260,6 +300,13 @@ impl App {
                     }
                     return;
                 }
+                KeyCode::Char('r') => {
+                    let sid = self.selected_compact_session().map(|s| s.session_id.clone());
+                    if let Some(sid) = sid {
+                        self.start_rename(sid);
+                    }
+                    return;
+                }
                 KeyCode::Char(c @ '1'..='9') => {
                     let idx = (c as usize) - ('1' as usize);
                     if idx < total {
@@ -356,6 +403,13 @@ impl App {
                 KeyCode::Char('D') => {
                     if let Some(cwd) = self.zoomed_room_cwd() {
                         self.open_tui_tool("gh", "gh dash", &cwd);
+                    }
+                    return;
+                }
+                KeyCode::Char('r') => {
+                    let sid = self.selected_zoomed_session().map(|s| s.session_id.clone());
+                    if let Some(sid) = sid {
+                        self.start_rename(sid);
                     }
                     return;
                 }
@@ -488,6 +542,100 @@ impl App {
                 self.filter_text.insert(byte_pos, c);
                 self.filter_cursor += 1;
                 self.clamp_selection();
+            }
+            _ => {}
+        }
+    }
+
+    fn start_rename(&mut self, session_id: String) {
+        let current = self.custom_names.get(&session_id).cloned().unwrap_or_else(|| {
+            let species = self.species_assignments.get(&session_id).copied()
+                .unwrap_or_else(|| view_ui::pick_species(&session_id));
+            view_ui::SPECIES_NAMES[species % view_ui::SPECIES_COUNT].to_string()
+        });
+        self.rename_text = current;
+        self.rename_cursor = self.rename_text.chars().count();
+        self.rename_session_id = Some(session_id);
+        self.rename_active = true;
+    }
+
+    fn handle_key_rename(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.rename_active = false;
+                self.rename_session_id = None;
+                self.rename_text.clear();
+                self.rename_cursor = 0;
+            }
+            KeyCode::Enter => {
+                if let Some(sid) = self.rename_session_id.take() {
+                    if self.rename_text.is_empty() {
+                        self.custom_names.remove(&sid);
+                    } else {
+                        self.custom_names.insert(sid, self.rename_text.clone());
+                    }
+                }
+                self.rename_active = false;
+                self.rename_text.clear();
+                self.rename_cursor = 0;
+            }
+            KeyCode::Backspace => {
+                if self.rename_cursor > 0 {
+                    let byte_pos = self.rename_text.char_indices()
+                        .nth(self.rename_cursor - 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let next_byte = self.rename_text.char_indices()
+                        .nth(self.rename_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.rename_text.len());
+                    self.rename_text.replace_range(byte_pos..next_byte, "");
+                    self.rename_cursor -= 1;
+                }
+            }
+            KeyCode::Delete => {
+                let char_count = self.rename_text.chars().count();
+                if self.rename_cursor < char_count {
+                    let byte_pos = self.rename_text.char_indices()
+                        .nth(self.rename_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.rename_text.len());
+                    let next_byte = self.rename_text.char_indices()
+                        .nth(self.rename_cursor + 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.rename_text.len());
+                    self.rename_text.replace_range(byte_pos..next_byte, "");
+                }
+            }
+            KeyCode::Left => {
+                if self.rename_cursor > 0 {
+                    self.rename_cursor -= 1;
+                }
+            }
+            KeyCode::Right => {
+                if self.rename_cursor < self.rename_text.chars().count() {
+                    self.rename_cursor += 1;
+                }
+            }
+            KeyCode::Home => self.rename_cursor = 0,
+            KeyCode::End => self.rename_cursor = self.rename_text.chars().count(),
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.rename_cursor = 0;
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.rename_cursor = self.rename_text.chars().count();
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.rename_text.clear();
+                self.rename_cursor = 0;
+            }
+            KeyCode::Char(c) => {
+                let byte_pos = self.rename_text.char_indices()
+                    .nth(self.rename_cursor)
+                    .map(|(i, _)| i)
+                    .unwrap_or(self.rename_text.len());
+                self.rename_text.insert(byte_pos, c);
+                self.rename_cursor += 1;
             }
             _ => {}
         }
