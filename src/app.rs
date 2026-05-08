@@ -229,19 +229,19 @@ impl App {
                 }
                 KeyCode::Char('g') => {
                     if let Some(cwd) = self.selected_compact_cwd() {
-                        self.open_tui_tool("lazygit", &cwd);
+                        self.open_tui_tool("lazygit", "lazygit", &cwd);
                     }
                     return;
                 }
                 KeyCode::Char('d') => {
                     if let Some(cwd) = self.selected_compact_cwd() {
-                        self.open_tui_tool("diffnav", &cwd);
+                        self.open_tui_tool("diffnav", "git diff | diffnav", &cwd);
                     }
                     return;
                 }
                 KeyCode::Char('D') => {
                     if let Some(cwd) = self.selected_compact_cwd() {
-                        self.open_tui_tool("dash", &cwd);
+                        self.open_tui_tool("dash", "dash", &cwd);
                     }
                     return;
                 }
@@ -328,19 +328,19 @@ impl App {
                 }
                 KeyCode::Char('g') => {
                     if let Some(cwd) = self.zoomed_room_cwd() {
-                        self.open_tui_tool("lazygit", &cwd);
+                        self.open_tui_tool("lazygit", "lazygit", &cwd);
                     }
                     return;
                 }
                 KeyCode::Char('d') => {
                     if let Some(cwd) = self.zoomed_room_cwd() {
-                        self.open_tui_tool("diffnav", &cwd);
+                        self.open_tui_tool("diffnav", "git diff | diffnav", &cwd);
                     }
                     return;
                 }
                 KeyCode::Char('D') => {
                     if let Some(cwd) = self.zoomed_room_cwd() {
-                        self.open_tui_tool("dash", &cwd);
+                        self.open_tui_tool("dash", "dash", &cwd);
                     }
                     return;
                 }
@@ -510,7 +510,7 @@ impl App {
         self.selected_zoomed_session().map(|s| s.cwd.clone())
     }
 
-    fn open_tui_tool(&mut self, binary: &str, cwd: &str) {
+    fn open_tui_tool(&mut self, binary: &str, shell_cmd: &str, cwd: &str) {
         if !binary_in_path(binary) {
             return;
         }
@@ -518,7 +518,7 @@ impl App {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| binary.to_string());
-        if let Ok(name) = tmux::create_session(&label, cwd, Some(binary), &[]) {
+        if let Ok(name) = tmux::create_session_shell(&label, cwd, shell_cmd) {
             tmux::switch_to_pane(&name);
             self.should_quit = true;
         }
