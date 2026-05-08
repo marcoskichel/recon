@@ -1217,6 +1217,7 @@ fn read_pid_session_map() -> HashMap<i32, SessionFileInfo> {
                         let started_at = v
                             .get("startedAt")
                             .and_then(|s| s.as_u64())
+                            .map(|ms| ms / 1000)
                             .unwrap_or(0);
                         map.insert(
                             pid as i32,
