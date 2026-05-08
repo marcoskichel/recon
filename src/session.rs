@@ -517,18 +517,26 @@ struct ParsedInfo {
 use std::sync::Mutex;
 use std::time::Instant;
 
-struct GitInfo {
+struct StableGitInfo {
     repo_name: String,
     relative_dir: Option<String>,
+}
+
+struct BranchInfo {
     branch: Option<String>,
     fetched_at: Instant,
 }
 
-static GIT_CACHE: Mutex<Option<HashMap<String, GitInfo>>> = Mutex::new(None);
+static STABLE_GIT_CACHE: Mutex<Option<HashMap<String, StableGitInfo>>> = Mutex::new(None);
+static BRANCH_CACHE: Mutex<Option<HashMap<String, BranchInfo>>> = Mutex::new(None);
 
-const GIT_CACHE_TTL: Duration = Duration::from_secs(30);
+const BRANCH_CACHE_TTL: Duration = Duration::from_secs(30);
 
-/// Get the git project name, relative_dir, and branch for a directory (cached for 30s).
+/// Get the git project name, relative_dir, and branch for a directory.
+///
+/// repo_name and relative_dir are immutable per CWD — cached forever to avoid
+/// repeated TCC prompts on macOS for git/canonicalize syscalls.
+/// branch can change at runtime — refreshed every 30s.
 fn git_project_info(cwd: &str) -> (String, Option<String>, Option<String>) {
     if !validate_cwd(cwd) {
         let fallback = Path::new(cwd)
@@ -538,32 +546,44 @@ fn git_project_info(cwd: &str) -> (String, Option<String>, Option<String>) {
         return (fallback, None, None);
     }
 
-    {
-        let cache = GIT_CACHE.lock().unwrap();
-        if let Some(info) = cache.as_ref().and_then(|c| c.get(cwd)) {
-            if info.fetched_at.elapsed() < GIT_CACHE_TTL {
-                return (info.repo_name.clone(), info.relative_dir.clone(), info.branch.clone());
+    let (repo_name, relative_dir) = {
+        let mut cache = STABLE_GIT_CACHE.lock().unwrap();
+        let map = cache.get_or_insert_with(HashMap::new);
+        if let Some(info) = map.get(cwd) {
+            (info.repo_name.clone(), info.relative_dir.clone())
+        } else {
+            let repo_name = fetch_git_repo_name(cwd);
+            let relative_dir = fetch_relative_dir(cwd);
+            map.insert(
+                cwd.to_string(),
+                StableGitInfo {
+                    repo_name: repo_name.clone(),
+                    relative_dir: relative_dir.clone(),
+                },
+            );
+            (repo_name, relative_dir)
+        }
+    };
+
+    let branch = {
+        let mut cache = BRANCH_CACHE.lock().unwrap();
+        let map = cache.get_or_insert_with(HashMap::new);
+        match map.get(cwd) {
+            Some(info) if info.fetched_at.elapsed() < BRANCH_CACHE_TTL => info.branch.clone(),
+            _ => {
+                let branch = fetch_git_branch(cwd);
+                map.insert(
+                    cwd.to_string(),
+                    BranchInfo {
+                        branch: branch.clone(),
+                        fetched_at: Instant::now(),
+                    },
+                );
+                branch
             }
         }
-    }
+    };
 
-    let repo_name = fetch_git_repo_name(cwd);
-    let relative_dir = fetch_relative_dir(cwd);
-    let branch = fetch_git_branch(cwd);
-
-    let mut cache = GIT_CACHE.lock().unwrap();
-    if cache.is_none() {
-        *cache = Some(HashMap::new());
-    }
-    cache.as_mut().unwrap().insert(
-        cwd.to_string(),
-        GitInfo {
-            repo_name: repo_name.clone(),
-            relative_dir: relative_dir.clone(),
-            branch: branch.clone(),
-            fetched_at: Instant::now(),
-        },
-    );
     (repo_name, relative_dir, branch)
 }
 
@@ -592,11 +612,10 @@ fn fetch_canonical_repo_name(cwd: &str) -> Option<String> {
     } else {
         PathBuf::from(cwd).join(&common)
     };
-    let resolved = common_path.canonicalize().unwrap_or(common_path);
-    let repo_root = if resolved.file_name().map(|n| n == ".git").unwrap_or(false) {
-        resolved.parent()?
+    let repo_root = if common_path.file_name().map(|n| n == ".git").unwrap_or(false) {
+        common_path.parent()?.to_path_buf()
     } else {
-        &resolved
+        common_path
     };
     repo_root.file_name().map(|n| n.to_string_lossy().to_string())
 }
@@ -631,16 +650,24 @@ fn fetch_relative_dir(cwd: &str) -> Option<String> {
         _ => return None,
     };
 
-    // Canonicalize both paths to resolve symlinks (e.g. /tmp → /private/tmp on macOS)
-    let cwd_resolved = Path::new(cwd)
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from(cwd));
-    let top_resolved = Path::new(&toplevel)
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from(&toplevel));
-    let relative = cwd_resolved
-        .strip_prefix(&top_resolved)
-        .unwrap_or(Path::new(""));
+    // Try plain strip_prefix first (avoids canonicalize syscall — fewer TCC prompts).
+    // Fall back to canonicalize only when literal paths don't share a prefix
+    // (e.g. /tmp vs /private/tmp on macOS).
+    let cwd_path = Path::new(cwd);
+    let top_path = Path::new(&toplevel);
+    let relative = cwd_path
+        .strip_prefix(top_path)
+        .map(Path::to_path_buf)
+        .or_else(|_| {
+            let cwd_resolved = cwd_path.canonicalize().unwrap_or_else(|_| PathBuf::from(cwd));
+            let top_resolved = top_path
+                .canonicalize()
+                .unwrap_or_else(|_| PathBuf::from(&toplevel));
+            cwd_resolved
+                .strip_prefix(&top_resolved)
+                .map(Path::to_path_buf)
+        })
+        .unwrap_or_default();
 
     if relative.as_os_str().is_empty() || relative == Path::new(".") {
         None
