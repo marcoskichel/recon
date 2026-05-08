@@ -13,3 +13,4 @@ dirs = "6"
 clap = { version = "4", features = ["derive"] }
 chrono = "0.4"
 ureq = { version = "2", features = ["json", "tls"], default-features = false }
+libc = "0.2"

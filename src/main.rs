@@ -8,6 +8,7 @@ mod session;
 mod summarizer;
 mod tmux;
 mod ui;
+mod view_lock;
 mod view_ui;
 
 use std::io;
@@ -124,13 +125,31 @@ fn run_daemon(interval_secs: u64) {
     }
     eprintln!("recon daemon: polling every {}s. Ctrl-C to stop.", interval_secs);
     let interval = Duration::from_secs(interval_secs.max(2));
+    let mut was_paused = false;
     loop {
-        app.refresh();
+        if view_lock::is_active() {
+            if !was_paused {
+                eprintln!("recon daemon: view active, pausing polling.");
+                was_paused = true;
+            }
+        } else {
+            if was_paused {
+                eprintln!("recon daemon: view closed, resuming polling.");
+                was_paused = false;
+            }
+            app.refresh();
+        }
         std::thread::sleep(interval);
     }
 }
 
 fn run_tui(start_mode: ViewMode, compact: bool) -> io::Result<()> {
+    let _view_lock = if start_mode == ViewMode::View {
+        view_lock::ViewLock::acquire()
+    } else {
+        None
+    };
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
