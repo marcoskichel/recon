@@ -58,7 +58,22 @@ impl App {
     }
 
     pub fn refresh(&mut self) {
-        let sessions: Vec<Session> = session::discover_sessions(&self.prev_sessions)
+        self.refresh_with(false);
+    }
+
+    /// Daemon variant — skips git enrichment to avoid macOS TCC prompts on
+    /// per-session CWDs that live in protected directories.
+    pub fn refresh_lite(&mut self) {
+        self.refresh_with(true);
+    }
+
+    fn refresh_with(&mut self, lite: bool) {
+        let raw = if lite {
+            session::discover_sessions_lite(&self.prev_sessions)
+        } else {
+            session::discover_sessions(&self.prev_sessions)
+        };
+        let sessions: Vec<Session> = raw
             .into_iter()
             .filter(|s| s.tmux_session.is_some())
             .collect();

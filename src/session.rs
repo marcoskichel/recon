@@ -162,7 +162,38 @@ pub fn format_window(tokens: u64) -> String {
 }
 
 /// Discover sessions by scanning JSONL files, then matching to live tmux panes.
+///
+/// `enrich_git` controls whether project_name/branch/relative_dir are populated
+/// via git invocations on each session's CWD. The view needs them for display;
+/// the daemon does not (it only feeds JSONL contents to the summarizer).
+/// Skipping git in daemon mode avoids running `git -C <user-cwd>` per session,
+/// which on macOS triggers TCC prompts whenever a CWD lives under a protected
+/// directory (Documents, Desktop, Downloads, iCloud, external volumes).
 pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Session> {
+    discover_sessions_inner(prev_sessions, true)
+}
+
+/// Daemon variant: skips git enrichment to avoid TCC prompts on macOS.
+pub fn discover_sessions_lite(prev_sessions: &HashMap<String, Session>) -> Vec<Session> {
+    discover_sessions_inner(prev_sessions, false)
+}
+
+fn project_info(cwd: &str, enrich: bool) -> (String, Option<String>, Option<String>) {
+    if enrich {
+        git_project_info(cwd)
+    } else {
+        let name = Path::new(cwd)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| cwd.to_string());
+        (name, None, None)
+    }
+}
+
+fn discover_sessions_inner(
+    prev_sessions: &HashMap<String, Session>,
+    enrich_git: bool,
+) -> Vec<Session> {
     let claude_dir = match dirs::home_dir() {
         Some(h) => h.join(".claude").join("projects"),
         None => return vec![],
@@ -240,7 +271,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                         let cwd = info.cwd
                             .or_else(|| prev.map(|s| s.cwd.clone()))
                             .unwrap_or_else(|| decode_project_path(&project_dir));
-                        let (project_name, relative_dir, branch) = git_project_info(&cwd);
+                        let (project_name, relative_dir, branch) = project_info(&cwd, enrich_git);
                         existing.project_name = project_name;
                         existing.relative_dir = relative_dir;
                         existing.branch = branch;
@@ -275,7 +306,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
                 .cwd
                 .or_else(|| prev.map(|s| s.cwd.clone()))
                 .unwrap_or_else(|| decode_project_path(&project_dir));
-            let (project_name, relative_dir, branch) = git_project_info(&cwd);
+            let (project_name, relative_dir, branch) = project_info(&cwd, enrich_git);
 
             let status = determine_status(
                 &path,
@@ -374,7 +405,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
             );
 
             let cwd = info.cwd.clone().unwrap_or_else(|| live.pane_cwd.clone());
-            let (project_name, relative_dir, branch) = git_project_info(&cwd);
+            let (project_name, relative_dir, branch) = project_info(&cwd, enrich_git);
 
             let status = determine_status(
                 &path,
@@ -407,7 +438,7 @@ pub fn discover_sessions(prev_sessions: &HashMap<String, Session>) -> Vec<Sessio
             });
         } else {
             // No JSONL found — brand-new session, show as New placeholder
-            let (project_name, relative_dir, branch) = git_project_info(&live.pane_cwd);
+            let (project_name, relative_dir, branch) = project_info(&live.pane_cwd, enrich_git);
             let tags = read_tmux_tags(&live.tmux_session);
             sessions.push(Session {
                 session_id: session_id_key.clone(),

@@ -141,7 +141,7 @@ fn run_daemon(interval_secs: u64) {
                 eprintln!("recon daemon: view closed, resuming polling.");
                 was_paused = false;
             }
-            app.refresh();
+            app.refresh_lite();
         }
         std::thread::sleep(interval);
     }
