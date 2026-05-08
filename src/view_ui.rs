@@ -2051,6 +2051,12 @@ fn render_empty(frame: &mut Frame, area: Rect, _tick: u64) {
 }
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
+    if let Some(msg) = app.active_status_message() {
+        let line = Line::from(Span::styled(msg.to_string(), Style::default().fg(Color::Yellow)));
+        frame.render_widget(Paragraph::new(line), area);
+        return;
+    }
+
     let mut spans = vec![];
 
     if app.view_zoomed_room.is_some() {
