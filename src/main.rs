@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod model;
 mod session;
+mod state;
 mod summarizer;
 mod tmux;
 mod view_lock;
@@ -38,8 +39,59 @@ fn main() -> io::Result<()> {
         Some(Command::DockToggle) => run_dock_toggle(),
         Some(Command::DockFocus) => run_dock_focus(),
         Some(Command::DockInfo { session_id }) => run_dock_info(&session_id),
+        Some(Command::Toggle) => run_toggle(),
         None => run_tui(),
     }
+}
+
+fn run_toggle() -> io::Result<()> {
+    use std::process::Command as ProcCommand;
+
+    let tmux = |args: &[&str]| -> io::Result<String> {
+        let out = ProcCommand::new("tmux").args(args).output()?;
+        if !out.status.success() {
+            let msg = String::from_utf8_lossy(&out.stderr).to_string();
+            return Err(io::Error::new(io::ErrorKind::Other, msg));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+
+    if std::env::var_os("TMUX").is_none() {
+        eprintln!("roostr toggle: not inside tmux");
+        std::process::exit(1);
+    }
+
+    let current_win = tmux(&["display-message", "-p", "#{window_id}"])?;
+    let current_name = tmux(&["display-message", "-p", "#{window_name}"])?;
+    let windows = tmux(&[
+        "list-windows",
+        "-F",
+        "#{window_id} #{window_name}",
+    ])?;
+
+    let roostr_win = windows.lines().find_map(|line| {
+        let mut parts = line.splitn(2, ' ');
+        let id = parts.next()?;
+        let name = parts.next().unwrap_or("");
+        if name == "roostr" {
+            Some(id.to_string())
+        } else {
+            None
+        }
+    });
+
+    match roostr_win {
+        Some(id) if current_name == "roostr" || id == current_win => {
+            tmux(&["kill-window", "-t", &id])?;
+        }
+        Some(id) => {
+            tmux(&["select-window", "-t", &id])?;
+        }
+        None => {
+            tmux(&["new-window", "-n", "roostr", "roostr"])?;
+        }
+    }
+    Ok(())
 }
 
 fn run_dock_info(session_id: &str) -> io::Result<()> {
@@ -320,6 +372,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<
         }
 
         if app.should_quit {
+            app.save_state();
             return Ok(());
         }
     }
@@ -492,6 +545,7 @@ fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::R
         }
 
         if app.should_quit {
+            app.save_state();
             return Ok(());
         }
     }

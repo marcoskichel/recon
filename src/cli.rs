@@ -33,4 +33,8 @@ pub enum Command {
         /// Session id (from ~/.claude/projects/*.jsonl).
         session_id: String,
     },
+    /// Toggle a `roostr` tmux window in the current session: focus it if
+    /// it exists elsewhere, kill it if already focused, or create it.
+    /// Designed for a single-keystroke binding (e.g. `C-y`).
+    Toggle,
 }
