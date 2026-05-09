@@ -25,6 +25,13 @@ const COMPACT_CARD_WIDTH: u16 = 46;
 const COMPACT_CARD_HEIGHT: u16 = 9;
 const COMPACT_SPRITE_COLS: u16 = 12; // sprite (10) + 1 col gutter each side
 
+// Dock vertical card: bordered block with sextant mini-sprite + bar.
+// Sextant sprite packs 2×3 pixels per cell → 5 cols × 4 rows from 10×10.
+const MINI_SPRITE_W: u16 = (SPRITE_W as u16) / 2;          // 5 cols
+const MINI_SPRITE_H: u16 = (SPRITE_H as u16 + 2) / 3;      // 4 rows
+const DOCK_CARD_W: u16 = MINI_SPRITE_W + 4;                // sprite (5) + padding (2) + border (2) = 9
+const DOCK_CARD_H: u16 = MINI_SPRITE_H + 3;                // border (2) + sprite (4) + dot (1) = 7
+
 // ── Pixel sprite data ────────────────────────────────────────────────
 // Each sprite is SPRITE_H rows x SPRITE_W cols. 0 = transparent.
 // Positive values index into the per-state color palette.
@@ -1371,6 +1378,98 @@ fn render_sprite_lines(sprite: &Sprite, palette: Palette) -> Vec<Line<'static>> 
     lines
 }
 
+// ── Sextant compact renderer ─────────────────────────────────────────
+// 2×3 pixels per cell via Unicode 13 sextant glyphs. 10×10 → 5w × 4h.
+// Bit positions: TL=0, TR=1, ML=2, MR=3, BL=4, BR=5.
+
+fn sextant_glyph(bits: u8) -> String {
+    match bits {
+        0 => " ".to_string(),
+        21 => "\u{258C}".to_string(),
+        42 => "\u{2590}".to_string(),
+        63 => "\u{2588}".to_string(),
+        _ => {
+            let skips = (bits > 0) as u32 + (bits > 21) as u32 + (bits > 42) as u32;
+            let off = bits as u32 - skips;
+            char::from_u32(0x1FB00 + off)
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| " ".to_string())
+        }
+    }
+}
+
+fn render_sprite_compact(sprite: &Sprite, palette: Palette) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    let rows = SPRITE_H;
+    let cols = SPRITE_W;
+
+    for y in (0..rows).step_by(3) {
+        let mut spans: Vec<Span<'static>> = Vec::new();
+
+        for x in (0..cols).step_by(2) {
+            let get = |dy: usize, dx: usize| -> u8 {
+                let yy = y + dy;
+                let xx = x + dx;
+                if yy < rows && xx < cols { sprite[yy][xx] } else { 0 }
+            };
+            let pixels = [
+                get(0, 0), get(0, 1),
+                get(1, 0), get(1, 1),
+                get(2, 0), get(2, 1),
+            ];
+
+            let mut freq: [(u8, u8); 12] = [(0, 0); 12];
+            let mut n = 0usize;
+            for &p in &pixels {
+                if p == 0 {
+                    continue;
+                }
+                if let Some(e) = freq[..n].iter_mut().find(|(c, _)| *c == p) {
+                    e.1 += 1;
+                } else if n < 12 {
+                    freq[n] = (p, 1);
+                    n += 1;
+                }
+            }
+
+            if n == 0 {
+                spans.push(Span::raw(" "));
+                continue;
+            }
+
+            freq[..n].sort_by(|a, b| b.1.cmp(&a.1));
+            let fg_idx = freq[0].0;
+            let bg_idx = if n > 1 { freq[1].0 } else { 0 };
+
+            let bit_for = |p: u8| -> u8 {
+                if p == fg_idx || (p != 0 && p != bg_idx) { 1 } else { 0 }
+            };
+            let bits = bit_for(pixels[0])
+                | (bit_for(pixels[1]) << 1)
+                | (bit_for(pixels[2]) << 2)
+                | (bit_for(pixels[3]) << 3)
+                | (bit_for(pixels[4]) << 4)
+                | (bit_for(pixels[5]) << 5);
+
+            let glyph = sextant_glyph(bits);
+            let (fr, fg, fb) = palette[fg_idx as usize];
+            let style = if bg_idx == 0 {
+                Style::default().fg(Color::Rgb(fr, fg, fb))
+            } else {
+                let (br2, bg2, bb) = palette[bg_idx as usize];
+                Style::default()
+                    .fg(Color::Rgb(fr, fg, fb))
+                    .bg(Color::Rgb(br2, bg2, bb))
+            };
+            spans.push(Span::styled(glyph, style));
+        }
+
+        lines.push(Line::from(spans));
+    }
+
+    lines
+}
+
 // ── Room grouping ────────────────────────────────────────────────────
 
 pub(crate) struct Room {
@@ -1567,6 +1666,157 @@ pub fn render(frame: &mut Frame, app: &App) {
         next += 1;
     }
     render_footer(frame, app, chunks[next]);
+}
+
+// ── Dock view ─────────────────────────────────────────────────────────
+// Vertical stack of bordered cards. Each card: index label, full-size
+// sprite (10×5 half-block), token % and progress bar. Designed to run in
+// a narrow tmux pane (width ≈ DOCK_CARD_W).
+
+pub fn render_dock(frame: &mut Frame, app: &App) {
+    let full = frame.area();
+    let show_search = app.filter_active || !app.filter_text.is_empty();
+    let chunks = if show_search {
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(full)
+    } else {
+        Layout::vertical([Constraint::Min(1)]).split(full)
+    };
+    let dock_full = chunks[0];
+
+    let dock_w = DOCK_CARD_W.min(dock_full.width);
+    let area = Rect {
+        x: dock_full.x,
+        y: dock_full.y,
+        width: dock_w,
+        height: dock_full.height,
+    };
+
+    let filtered = app.filtered_indices();
+    let rooms = group_into_rooms_stable(&app.sessions, &filtered, &app.view_room_order);
+    let indices: Vec<usize> = rooms
+        .into_iter()
+        .flat_map(|r| r.session_indices.into_iter())
+        .collect();
+
+    if indices.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled("no sessions", Style::default().fg(Color::DarkGray)))
+                .alignment(Alignment::Center),
+            area,
+        );
+        if show_search {
+            render_search_bar(frame, app, chunks[1]);
+        }
+        return;
+    }
+
+    let max_cards = (area.height / DOCK_CARD_H).max(1) as usize;
+    let n = max_cards.min(indices.len());
+    let constraints: Vec<Constraint> = (0..n)
+        .map(|_| Constraint::Length(DOCK_CARD_H))
+        .collect();
+    let cards = Layout::vertical(constraints).split(area);
+
+    let selected = app.view_selected_agent.min(indices.len().saturating_sub(1));
+    for (i, &session_idx) in indices.iter().take(n).enumerate() {
+        let session = &app.sessions[session_idx];
+        render_dock_card(frame, session, cards[i], app.tick, i + 1, i == selected);
+    }
+
+    if show_search {
+        render_search_bar(frame, app, chunks[1]);
+    }
+}
+
+fn render_dock_card(
+    frame: &mut Frame,
+    session: &Session,
+    area: Rect,
+    tick: u64,
+    index: usize,
+    is_selected: bool,
+) {
+    if area.width < 5 || area.height < 4 {
+        return;
+    }
+
+    let border_color = if session.status == SessionStatus::Input {
+        // Pulse Yellow/White each tick — same "glow" as room border in
+        // the expanded view. Catches the eye when input is needed.
+        if tick % 2 == 0 { Color::Yellow } else { Color::White }
+    } else if is_selected {
+        Color::Cyan
+    } else {
+        Color::Rgb(60, 60, 70)
+    };
+    let card = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border_color))
+        .padding(Padding::horizontal(1));
+    let inner = card.inner(area);
+    frame.render_widget(card, area);
+
+    if inner.width < 3 || inner.height < 3 {
+        return;
+    }
+
+    let chunks = Layout::vertical([
+        Constraint::Length(MINI_SPRITE_H), // sprite
+        Constraint::Length(1),             // thin bar
+    ])
+    .split(inner);
+
+    // Sprite (sextant compact, centered)
+    let offset = session_phase_offset(&session.session_id);
+    let anim_frame = animation_frame(&session.status, tick + offset);
+    let species = pick_species(&session.session_id);
+    let (sprite, palette) = sprite_data(&session.status, anim_frame, species);
+    let sprite_lines = render_sprite_compact(sprite, palette);
+    frame.render_widget(
+        Paragraph::new(sprite_lines).alignment(Alignment::Center),
+        chunks[0],
+    );
+
+    // Thin token-usage bar — lower 1/8 block so it looks like a slim
+    // strip at the bottom of its row instead of filling the whole cell.
+    let ratio = session.token_ratio();
+    let bar_color = if ratio > 0.75 {
+        Color::Red
+    } else if ratio > 0.40 {
+        Color::Yellow
+    } else {
+        Color::Green
+    };
+    let bar_w = chunks[1].width as usize;
+    let filled = (ratio * bar_w as f64).round().min(bar_w as f64) as usize;
+    let empty = bar_w.saturating_sub(filled);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("\u{2581}".repeat(filled), Style::default().fg(bar_color)),
+            Span::styled(
+                "\u{2581}".repeat(empty),
+                Style::default().fg(Color::Rgb(60, 60, 70)),
+            ),
+        ])),
+        chunks[1],
+    );
+
+    // [N] overlay on top border
+    let label = format!("[{}]", index);
+    let label_w = (label.chars().count() as u16).min(area.width.saturating_sub(2));
+    if label_w > 0 {
+        let label_rect = Rect {
+            x: area.x + 1,
+            y: area.y,
+            width: label_w,
+            height: 1,
+        };
+        let style = Style::default()
+            .fg(if is_selected { Color::Cyan } else { Color::White })
+            .add_modifier(Modifier::BOLD);
+        frame.render_widget(Paragraph::new(label).style(style), label_rect);
+    }
 }
 
 fn render_search_bar(frame: &mut Frame, app: &App, area: Rect) {
@@ -2319,7 +2569,6 @@ mod tests {
             started_at: 0,
             jsonl_path: PathBuf::new(),
             last_file_size: 0,
-            tags: std::collections::HashMap::new(),
             last_user_prompt: None,
         }
     }
