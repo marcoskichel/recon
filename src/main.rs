@@ -141,7 +141,7 @@ fn run_dock_focus() -> io::Result<()> {
     };
 
     if std::env::var_os("TMUX").is_none() {
-        eprintln!("recon dock-focus: not inside tmux");
+        eprintln!("roostr dock-focus: not inside tmux");
         std::process::exit(1);
     }
 
@@ -158,7 +158,7 @@ fn run_dock_focus() -> io::Result<()> {
         let mut parts = line.splitn(2, ' ');
         let id = parts.next()?;
         let title = parts.next().unwrap_or("");
-        if title == "recon-dock" {
+        if title == "roostr-dock" {
             Some(id.to_string())
         } else {
             None
@@ -176,7 +176,7 @@ fn run_dock_focus() -> io::Result<()> {
             "9",
             "-t",
             &win,
-            "recon dock",
+            "roostr dock",
         ])?;
     }
     Ok(())
@@ -195,7 +195,7 @@ fn run_dock_toggle() -> io::Result<()> {
     };
 
     if std::env::var_os("TMUX").is_none() {
-        eprintln!("recon dock-toggle: not inside tmux");
+        eprintln!("roostr dock-toggle: not inside tmux");
         std::process::exit(1);
     }
 
@@ -212,7 +212,7 @@ fn run_dock_toggle() -> io::Result<()> {
         let mut parts = line.splitn(2, ' ');
         let id = parts.next()?;
         let title = parts.next().unwrap_or("");
-        if title == "recon-dock" {
+        if title == "roostr-dock" {
             Some(id.to_string())
         } else {
             None
@@ -233,9 +233,9 @@ fn run_dock_toggle() -> io::Result<()> {
             "#{pane_id}",
             "-t",
             &win,
-            "recon dock",
+            "roostr dock",
         ])?;
-        tmux(&["select-pane", "-t", &new_id, "-T", "recon-dock"])?;
+        tmux(&["select-pane", "-t", &new_id, "-T", "roostr-dock"])?;
     }
     Ok(())
 }
@@ -243,21 +243,21 @@ fn run_dock_toggle() -> io::Result<()> {
 fn run_daemon(interval_secs: u64) {
     let mut app = App::new_blocking();
     if !app.summarizer.enabled() {
-        eprintln!("recon daemon: summarizer disabled (no Ollama and no ANTHROPIC_API_KEY).");
+        eprintln!("roostr daemon: summarizer disabled (no Ollama and no ANTHROPIC_API_KEY).");
         std::process::exit(1);
     }
-    eprintln!("recon daemon: polling every {}s. Ctrl-C to stop.", interval_secs);
+    eprintln!("roostr daemon: polling every {}s. Ctrl-C to stop.", interval_secs);
     let interval = Duration::from_secs(interval_secs.max(2));
     let mut was_paused = false;
     loop {
         if view_lock::is_active() {
             if !was_paused {
-                eprintln!("recon daemon: view active, pausing polling.");
+                eprintln!("roostr daemon: view active, pausing polling.");
                 was_paused = true;
             }
         } else {
             if was_paused {
-                eprintln!("recon daemon: view closed, resuming polling.");
+                eprintln!("roostr daemon: view closed, resuming polling.");
                 was_paused = false;
             }
             app.refresh();
@@ -333,7 +333,7 @@ fn run_dock() -> io::Result<()> {
     {
         use std::io::Write;
         let mut stdout = io::stdout();
-        let _ = write!(stdout, "\u{1b}]2;recon-dock\u{1b}\\");
+        let _ = write!(stdout, "\u{1b}]2;roostr-dock\u{1b}\\");
         let _ = stdout.flush();
     }
 
@@ -441,7 +441,7 @@ fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::R
                                     "60%",
                                     "-T",
                                     " Session detail ",
-                                    &format!("recon dock-info {}", session_id),
+                                    &format!("roostr dock-info {}", session_id),
                                 ])
                                 .status();
                         }

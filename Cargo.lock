@@ -653,20 +653,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "recon"
-version = "0.6.1"
-dependencies = [
- "clap",
- "crossterm",
- "dirs",
- "libc",
- "ratatui",
- "serde",
- "serde_json",
- "ureq",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -698,6 +684,20 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "roostr"
+version = "0.7.0"
+dependencies = [
+ "clap",
+ "crossterm",
+ "dirs",
+ "libc",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "ureq",
 ]
 
 [[package]]

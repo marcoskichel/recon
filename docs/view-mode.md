@@ -1,24 +1,24 @@
-# recon view — Tamagotchi-Style Graphic Dashboard
+# roostr view — Tamagotchi-Style Graphic Dashboard
 
 ## Vision
 
 A graphical, always-on dashboard for monitoring Claude Code agents. Think Tamagotchi meets dev tools — each agent is a little creature living in a room, and you're raising them. The dashboard sits on a side monitor so you can glance over and instantly know: who's working, who's sleeping, and who's crying for attention.
 
 ```
-recon view
+roostr view
 ```
 
-Opens a TUI-based Tamagotchi dashboard using ratatui. No browser, no web server — runs in the same terminal environment as the table view. Toggle between table and view mode with `v`. Works alongside the existing TUI mode (`recon` for table, `recon view` for Tamagotchi).
+Opens a TUI-based Tamagotchi dashboard using ratatui. No browser, no web server — runs in the same terminal environment as the table view. Toggle between table and view mode with `v`. Works alongside the existing TUI mode (`roostr` for table, `roostr view` for Tamagotchi).
 
 ## Prior Art
 
 **Pixel Agents** (VS Code extension by Pablo De Lucca) pioneered the concept of rendering AI coding agents as pixel-art characters in a virtual office. It uses Canvas 2D + React in a VS Code webview, reading Claude Code's JSONL files.
 
-Key differences from recon view:
+Key differences from roostr view:
 - Pixel Agents has unreliable status detection (JSONL heuristics that "frequently misfire")
-- recon has authoritative status via tmux pane text parsing
-- Pixel Agents is VS Code-only; recon view is browser-based, terminal-native
-- recon view uses the Tamagotchi metaphor instead of office workers
+- roostr has authoritative status via tmux pane text parsing
+- Pixel Agents is VS Code-only; roostr view is browser-based, terminal-native
+- roostr view uses the Tamagotchi metaphor instead of office workers
 
 ## The Tamagotchi Metaphor
 
@@ -41,9 +41,9 @@ The emotional hook: "are my little guys okay?" makes you want to check on them.
 Rooms group agents by **working directory basename**. Not by git repo (too coarse for monorepos), not custom names (too much friction initially).
 
 ```
-/Users/gavra/repos/recon    → room "recon"
+/Users/gavra/repos/roostr    → room "roostr"
 /Users/gavra/repos/api      → room "api"
-/Users/gavra/repos/recon    → room "recon" (same room as first)
+/Users/gavra/repos/roostr    → room "roostr" (same room as first)
 ```
 
 Multiple agents in the same CWD share a room. Rooms auto-create when a session appears and auto-destroy when the last session in that room disappears.
@@ -51,7 +51,7 @@ Multiple agents in the same CWD share a room. Rooms auto-create when a session a
 ### Room Display
 
 ```
-┌─ recon (2 agents) ──────────┐  ┌─ api (1 agent) ──────────────┐
+┌─ roostr (2 agents) ──────────┐  ┌─ api (1 agent) ──────────────┐
 │                              │  │                               │
 │   😊        😴              │  │          😊                   │
 │  "refactor" "tests"         │  │        "auth-flow"            │
@@ -66,11 +66,11 @@ Multiple agents in the same CWD share a room. Rooms auto-create when a session a
 
 ### Future: Custom Room Names
 
-A config file (`~/.config/recon/rooms.toml` or similar) could map CWD patterns to custom room names:
+A config file (`~/.config/roostr/rooms.toml` or similar) could map CWD patterns to custom room names:
 
 ```toml
 [rooms]
-"/Users/gavra/repos/recon" = "HQ"
+"/Users/gavra/repos/roostr" = "HQ"
 "/Users/gavra/repos/api-*" = "Backend"
 ```
 
@@ -150,7 +150,7 @@ Character variation can come from: color palette, accessory (hat, glasses), body
 └─────────┼─────────────────────────────────────────┘
           │
 ┌─────────┼─────────────────────────────────────────┐
-│  recon  │  Rust backend                            │
+│  roostr  │  Rust backend                            │
 │         │                                          │
 │  ┌──────┴──────┐    ┌──────────────────┐          │
 │  │ axum server  │    │ discover_sessions │          │
@@ -209,10 +209,10 @@ The SSE endpoint sends the full session list as JSON every 2 seconds:
     {
       "session_id": "abc123",
       "tmux_session": "refactor-auth",
-      "project_name": "recon",
+      "project_name": "roostr",
       "branch": "feat/auth",
-      "cwd": "/Users/gavra/repos/recon",
-      "room": "recon",
+      "cwd": "/Users/gavra/repos/roostr",
+      "room": "roostr",
       "status": "Working",
       "model_display": "Opus 4.6",
       "total_input_tokens": 45000,
@@ -245,8 +245,8 @@ When zoomed into a room, you should be able to select individual agents and inte
 - Selected agent shows extra detail: model, full context bar, last activity
 
 **Switch to agent**:
-- `Enter` on a selected agent runs `tmux switch-client -t {session}` and exits recon (same as table mode)
-- This switches the current tmux client — the user returns to recon by switching back
+- `Enter` on a selected agent runs `tmux switch-client -t {session}` and exits roostr (same as table mode)
+- This switches the current tmux client — the user returns to roostr by switching back
 
 **Kill agent**:
 - `x` on a selected agent kills the tmux session (same as table mode, with confirmation)
@@ -257,7 +257,7 @@ When zoomed into a room, you should be able to select individual agents and inte
 ## Implementation Phases
 
 ### Phase 1: Static Dashboard (done)
-- `recon view` subcommand (TUI, not browser — pivoted from original axum/Canvas plan)
+- `roostr view` subcommand (TUI, not browser — pivoted from original axum/Canvas plan)
 - Room layout: 2x2 grid with pagination (`h/l`), zoom (`1-4`), `Esc` to zoom out
 - Half-block pixel sprites per state (New=egg, Working=green, Idle=sleeping, Input=angry)
 - Session name, git branch, status label, context bar per agent
@@ -282,5 +282,5 @@ When zoomed into a room, you should be able to select individual agents and inte
 1. **Glanceable**: You should know the health of all agents in <1 second from across a room
 2. **Emotionally engaging**: The Tamagotchi metaphor makes monitoring feel like caretaking, not chore work
 3. **Zero config**: Works out of the box with sensible defaults (rooms from CWD, characters from session hash)
-4. **Single binary**: Everything embeds in the recon binary — no npm, no separate asset folders
+4. **Single binary**: Everything embeds in the roostr binary — no npm, no separate asset folders
 5. **Additive**: This is a new mode alongside the existing TUI, not a replacement

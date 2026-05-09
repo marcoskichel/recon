@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RECON="$(cd "$(dirname "$0")/.." && pwd)/target/debug/recon"
+ROOSTR="$(cd "$(dirname "$0")/.." && pwd)/target/debug/roostr"
 PASS=0
 FAIL=0
 
@@ -16,15 +16,15 @@ S_RESET="e2e-${RID}-reset"
 S_WORKING="e2e-${RID}-working"
 S_MULTI="e2e-${RID}-multi"
 S_DUAL="e2e-${RID}-dual"
-TMPDIR_NEW="/tmp/recon-e2e-${RID}"
-TMPDIR_INPUT="/tmp/recon-e2e-${RID}-input"
-TMPDIR_RESUME="/tmp/recon-e2e-${RID}-resume"
-TMPDIR_RESET="/tmp/recon-e2e-${RID}-reset"
-TMPDIR_WORKING="/tmp/recon-e2e-${RID}-working"
-TMPDIR_MULTI="/tmp/recon-e2e-${RID}-multi"
-TMPDIR_DUAL_A="/tmp/recon-e2e-${RID}-dual-a"
-TMPDIR_DUAL_B="/tmp/recon-e2e-${RID}-dual-b"
-TMPFILE="/tmp/recon-e2e-${RID}-testfile.txt"
+TMPDIR_NEW="/tmp/roostr-e2e-${RID}"
+TMPDIR_INPUT="/tmp/roostr-e2e-${RID}-input"
+TMPDIR_RESUME="/tmp/roostr-e2e-${RID}-resume"
+TMPDIR_RESET="/tmp/roostr-e2e-${RID}-reset"
+TMPDIR_WORKING="/tmp/roostr-e2e-${RID}-working"
+TMPDIR_MULTI="/tmp/roostr-e2e-${RID}-multi"
+TMPDIR_DUAL_A="/tmp/roostr-e2e-${RID}-dual-a"
+TMPDIR_DUAL_B="/tmp/roostr-e2e-${RID}-dual-b"
+TMPFILE="/tmp/roostr-e2e-${RID}-testfile.txt"
 FIXTURES="$(cd "$(dirname "$0")" && pwd)/fixtures"
 
 CLAUDE_MODEL="${CLAUDE_MODEL:-haiku}"
@@ -64,7 +64,7 @@ cleanup() {
     tmux list-sessions -F '#{session_name}' 2>/dev/null \
         | grep "^e2e-${RID}-" \
         | while read -r s; do tmux kill-session -t "$s" 2>/dev/null || true; done
-    rm -rf "$TMPDIR_NEW" "$TMPDIR_INPUT" "$TMPDIR_RESUME" "$TMPDIR_RESET" "$TMPDIR_WORKING" "$TMPDIR_MULTI" "$TMPDIR_DUAL_A" "$TMPDIR_DUAL_B" "$TMPFILE" "/tmp/recon-e2e-${RID}-tag"
+    rm -rf "$TMPDIR_NEW" "$TMPDIR_INPUT" "$TMPDIR_RESUME" "$TMPDIR_RESET" "$TMPDIR_WORKING" "$TMPDIR_MULTI" "$TMPDIR_DUAL_A" "$TMPDIR_DUAL_B" "$TMPFILE" "/tmp/roostr-e2e-${RID}-tag"
 }
 trap cleanup EXIT
 
@@ -79,8 +79,8 @@ if ! command -v claude &>/dev/null; then
     exit 1
 fi
 
-if [[ ! -x "$RECON" ]]; then
-    echo "Building recon..."
+if [[ ! -x "$ROOSTR" ]]; then
+    echo "Building roostr..."
     (cd "$(dirname "$0")/.." && cargo build --quiet)
 fi
 
@@ -102,7 +102,7 @@ send_to_session() {
 
 get_state() {
     local name="$1"
-    "$RECON" json 2>/dev/null | jq -r \
+    "$ROOSTR" json 2>/dev/null | jq -r \
         --arg name "$name" \
         '.sessions[] | select(.tmux_session == $name) | .status' \
     || echo ""
@@ -110,7 +110,7 @@ get_state() {
 
 get_field() {
     local name="$1" field="$2"
-    "$RECON" json 2>/dev/null | jq -r \
+    "$ROOSTR" json 2>/dev/null | jq -r \
         --arg name "$name" \
         --arg field "$field" \
         '.sessions[] | select(.tmux_session == $name) | .[$field]' \
@@ -217,7 +217,7 @@ if should_run "token_stability"; then
     tokens_stable=true
     prev_new="" prev_twin=""
     for i in $(seq 1 6); do
-        json=$("$RECON" json 2>/dev/null)
+        json=$("$ROOSTR" json 2>/dev/null)
         cur_new=$(echo "$json" | jq -r --arg n "$S_NEW" '.sessions[] | select(.tmux_session == $n) | .total_input_tokens')
         cur_twin=$(echo "$json" | jq -r --arg n "$S_TWIN" '.sessions[] | select(.tmux_session == $n) | .total_input_tokens')
         if [[ -n "$prev_new" && ("$cur_new" != "$prev_new" || "$cur_twin" != "$prev_twin") ]]; then
@@ -264,7 +264,7 @@ if should_run "sort_order"; then
     send_to_session "$S_TWIN" "say exactly: most recent"
     wait_for_state "$S_TWIN" "Idle" 20 >/dev/null 2>&1 || true
 
-    json=$("$RECON" json 2>/dev/null)
+    json=$("$ROOSTR" json 2>/dev/null)
     idx_new=$(echo "$json" | jq -r --arg n "$S_NEW" '.sessions | to_entries[] | select(.value.tmux_session == $n) | .key')
     idx_twin=$(echo "$json" | jq -r --arg n "$S_TWIN" '.sessions | to_entries[] | select(.value.tmux_session == $n) | .key')
 
@@ -300,10 +300,10 @@ if should_run "resume_tokens"; then
     wait_for_state "$S_RESUME_ORIG" "New" 15 >/dev/null 2>&1 || true
     sleep 3
 
-    send_to_session "$S_RESUME_ORIG" "say exactly the words: recon resume test"
+    send_to_session "$S_RESUME_ORIG" "say exactly the words: roostr resume test"
     wait_for_state "$S_RESUME_ORIG" "Idle" 30 >/dev/null 2>&1 || true
 
-    TOKENS_BEFORE=$("$RECON" json 2>/dev/null | jq -r \
+    TOKENS_BEFORE=$("$ROOSTR" json 2>/dev/null | jq -r \
         --arg n "$S_RESUME_ORIG" \
         '.sessions[] | select(.tmux_session == $n) | .total_input_tokens')
 
@@ -320,10 +320,10 @@ if should_run "resume_tokens"; then
     else
         echo "  Original session-id: $ORIG_SESSION_ID (tokens before exit: $TOKENS_BEFORE)"
 
-        "$RECON" resume --id "$ORIG_SESSION_ID" --name "$S_RESUME_NEW" --no-attach 2>/dev/null || true
+        "$ROOSTR" resume --id "$ORIG_SESSION_ID" --name "$S_RESUME_NEW" --no-attach 2>/dev/null || true
         sleep 8
 
-        TOKENS_RESUMED=$("$RECON" json 2>/dev/null | jq -r \
+        TOKENS_RESUMED=$("$ROOSTR" json 2>/dev/null | jq -r \
             --arg n "$S_RESUME_NEW" \
             '.sessions[] | select(.tmux_session == $n) | .total_input_tokens')
 
@@ -333,7 +333,7 @@ if should_run "resume_tokens"; then
             report pass "Resume: $S_RESUME_NEW shows ${TOKENS_RESUMED} tokens (original had ${TOKENS_BEFORE})"
         else
             echo "  Original tokens: $TOKENS_BEFORE, resumed tokens: '$TOKENS_RESUMED'"
-            "$RECON" json 2>/dev/null | jq -r --arg n "$S_RESUME_NEW" \
+            "$ROOSTR" json 2>/dev/null | jq -r --arg n "$S_RESUME_NEW" \
                 '.sessions[] | select(.tmux_session == $n)' | sed 's/^/    /'
             report fail "Resume: expected non-zero tokens for resumed session"
         fi
@@ -349,7 +349,7 @@ if should_run "resume_idempotency"; then
     else
         SESSIONS_BEFORE=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep "^e2e-${RID}-" | wc -l | tr -d ' ')
 
-        RESUME_OUTPUT=$("$RECON" resume --id "$ORIG_SESSION_ID" --name "$S_RESUME_NEW" --no-attach 2>&1 || true)
+        RESUME_OUTPUT=$("$ROOSTR" resume --id "$ORIG_SESSION_ID" --name "$S_RESUME_NEW" --no-attach 2>&1 || true)
 
         SESSIONS_AFTER=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep "^e2e-${RID}-" | wc -l | tr -d ' ')
 
@@ -371,7 +371,7 @@ if should_run "reset_activity"; then
     wait_for_state "$S_RESET" "Idle" 30 >/dev/null 2>&1 || true
 
     # Reset the session — creates new JSONL without updating {PID}.json.
-    # recon will show stale data from the old JSONL (known limitation).
+    # roostr will show stale data from the old JSONL (known limitation).
     # Verify the session is still discovered (not lost).
     send_to_session "$S_RESET" "/reset"
     sleep 5
@@ -408,7 +408,7 @@ fi
 # The bug: capture-pane -t <session> reads the active pane, not the Claude pane.
 # To expose this, Claude must be in a state that differs from what bash looks like.
 # We put Claude into Working state and make the bash pane active — without the fix,
-# recon reads the bash pane (Idle) instead of the Claude pane (Working).
+# roostr reads the bash pane (Idle) instead of the Claude pane (Working).
 if should_run "multi_pane_status"; then
     mkdir -p "$TMPDIR_MULTI"
     cp "$FIXTURES"/*.txt "$TMPDIR_MULTI/"
@@ -440,7 +440,7 @@ if should_run "pane_target_json"; then
         wait_for_state "$S_MULTI" "New" 15 >/dev/null 2>&1 || true
     fi
 
-    pane_target=$("$RECON" json 2>/dev/null | jq -r \
+    pane_target=$("$ROOSTR" json 2>/dev/null | jq -r \
         --arg name "$S_MULTI" \
         '.sessions[] | select(.tmux_session == $name) | .pane_target')
 
@@ -457,7 +457,7 @@ fi
 # the same tmux session, the resumed one has a new session_id in PID.json that
 # doesn't match any JSONL filename, so it enters the dedup loop — where
 # known_tmux blocks it because the fresh session already claimed the session name.
-# Result: the resumed pane is invisible to recon.
+# Result: the resumed pane is invisible to roostr.
 if should_run "dual_pane_discovery"; then
     CLAUDE_PATH="$(which claude)"
     mkdir -p "$TMPDIR_DUAL_A" "$TMPDIR_DUAL_B"
@@ -499,12 +499,12 @@ if should_run "dual_pane_discovery"; then
         tmux split-window -t "$S_DUAL" -c "$TMPDIR_DUAL_A" \
             "$CLAUDE_PATH $CLAUDE_FLAGS --resume $DUAL_SESSION_ID"
 
-        # Poll until recon sees 2 sessions with this tmux_session name (or timeout)
+        # Poll until roostr sees 2 sessions with this tmux_session name (or timeout)
         elapsed=0
         timeout=20
         count=0
         while (( elapsed < timeout )); do
-            count=$("$RECON" json 2>/dev/null | jq --arg name "$S_DUAL" \
+            count=$("$ROOSTR" json 2>/dev/null | jq --arg name "$S_DUAL" \
                 '[.sessions[] | select(.tmux_session == $name)] | length')
             if [[ "$count" -eq 2 ]]; then
                 break
@@ -517,7 +517,7 @@ if should_run "dual_pane_discovery"; then
             report pass "Dual-pane discovery: both fresh and resumed sessions detected in same tmux session"
         else
             echo "  Expected 2 sessions for tmux_session=$S_DUAL but found $count"
-            "$RECON" json 2>/dev/null | jq --arg name "$S_DUAL" \
+            "$ROOSTR" json 2>/dev/null | jq --arg name "$S_DUAL" \
                 '.sessions[] | select(.tmux_session == $name)' | sed 's/^/    /'
             report fail "Dual-pane discovery: resumed session not detected (dedup on tmux_session blocks it)"
         fi
@@ -527,12 +527,12 @@ fi
 # --- Test 14: Tags appear in JSON output ---
 if should_run "tags_launch"; then
     S_TAG="e2e-${RID}-tag"
-    TMPDIR_TAG="/tmp/recon-e2e-${RID}-tag"
+    TMPDIR_TAG="/tmp/roostr-e2e-${RID}-tag"
     mkdir -p "$TMPDIR_TAG"
-    "$RECON" launch --name "$S_TAG" --cwd "$TMPDIR_TAG" --command "$(which claude) $CLAUDE_FLAGS" --tag env:test --tag role:worker 2>/dev/null
+    "$ROOSTR" launch --name "$S_TAG" --cwd "$TMPDIR_TAG" --command "$(which claude) $CLAUDE_FLAGS" --tag env:test --tag role:worker 2>/dev/null
     wait_for_state "$S_TAG" "New" 15 >/dev/null 2>&1 || true
 
-    TAGS=$("$RECON" json 2>/dev/null | jq -r \
+    TAGS=$("$ROOSTR" json 2>/dev/null | jq -r \
         --arg name "$S_TAG" \
         '.sessions[] | select(.tmux_session == $name) | .tags')
 
@@ -546,15 +546,15 @@ fi
 # --- Test 15: Tag filter returns only matching sessions ---
 if should_run "tags_filter"; then
     S_TAG="e2e-${RID}-tag"  # reuse from test 14 (or create if skipped)
-    TMPDIR_TAG="/tmp/recon-e2e-${RID}-tag"
+    TMPDIR_TAG="/tmp/roostr-e2e-${RID}-tag"
     if ! tmux has-session -t "$S_TAG" 2>/dev/null; then
         mkdir -p "$TMPDIR_TAG"
-        "$RECON" launch --name "$S_TAG" --cwd "$TMPDIR_TAG" --command "$(which claude) $CLAUDE_FLAGS" --tag env:test --tag role:worker 2>/dev/null
+        "$ROOSTR" launch --name "$S_TAG" --cwd "$TMPDIR_TAG" --command "$(which claude) $CLAUDE_FLAGS" --tag env:test --tag role:worker 2>/dev/null
         wait_for_state "$S_TAG" "New" 15 >/dev/null 2>&1 || true
     fi
 
-    MATCH=$("$RECON" json --tag role:worker 2>/dev/null | jq '[.sessions[]] | length')
-    NO_MATCH=$("$RECON" json --tag role:nonexistent 2>/dev/null | jq '[.sessions[]] | length')
+    MATCH=$("$ROOSTR" json --tag role:worker 2>/dev/null | jq '[.sessions[]] | length')
+    NO_MATCH=$("$ROOSTR" json --tag role:nonexistent 2>/dev/null | jq '[.sessions[]] | length')
 
     if [[ "$MATCH" -ge 1 && "$NO_MATCH" -eq 0 ]]; then
         report pass "Tags filter: --tag role:worker matched $MATCH, --tag role:nonexistent matched 0"
@@ -566,15 +566,15 @@ fi
 # --- Test 16: Multiple tag filters require all to match ---
 if should_run "tags_multi_filter"; then
     S_TAG="e2e-${RID}-tag"  # reuse from test 14
-    TMPDIR_TAG="/tmp/recon-e2e-${RID}-tag"
+    TMPDIR_TAG="/tmp/roostr-e2e-${RID}-tag"
     if ! tmux has-session -t "$S_TAG" 2>/dev/null; then
         mkdir -p "$TMPDIR_TAG"
-        "$RECON" launch --name "$S_TAG" --cwd "$TMPDIR_TAG" --command "$(which claude) $CLAUDE_FLAGS" --tag env:test --tag role:worker 2>/dev/null
+        "$ROOSTR" launch --name "$S_TAG" --cwd "$TMPDIR_TAG" --command "$(which claude) $CLAUDE_FLAGS" --tag env:test --tag role:worker 2>/dev/null
         wait_for_state "$S_TAG" "New" 15 >/dev/null 2>&1 || true
     fi
 
-    BOTH=$("$RECON" json --tag env:test --tag role:worker 2>/dev/null | jq '[.sessions[]] | length')
-    PARTIAL=$("$RECON" json --tag env:test --tag role:manager 2>/dev/null | jq '[.sessions[]] | length')
+    BOTH=$("$ROOSTR" json --tag env:test --tag role:worker 2>/dev/null | jq '[.sessions[]] | length')
+    PARTIAL=$("$ROOSTR" json --tag env:test --tag role:manager 2>/dev/null | jq '[.sessions[]] | length')
 
     if [[ "$BOTH" -ge 1 && "$PARTIAL" -eq 0 ]]; then
         report pass "Tags multi-filter: both match=$BOTH, partial match=$PARTIAL (AND logic)"

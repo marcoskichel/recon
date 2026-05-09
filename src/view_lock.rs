@@ -4,7 +4,7 @@ use std::process;
 
 fn lock_path() -> Option<PathBuf> {
     let mut p = dirs::cache_dir()?;
-    p.push("recon");
+    p.push("roostr");
     let _ = fs::create_dir_all(&p);
     p.push("view.pid");
     Some(p)

@@ -1,14 +1,14 @@
-# recon
+# roostr
 
 A tmux-native dashboard for managing [Claude Code](https://claude.ai/claude-code) agents.
 
 Run multiple Claude Code sessions in tmux, then manage them all without ever leaving the terminal — see what each agent is working on, which ones need your attention, switch between them, kill or spawn new ones, and resume past sessions. All from a single keybinding.
 
-![recon demo](assets/demo.gif)
+![roostr demo](assets/demo.gif)
 
 ## Views
 
-### Tamagotchi View (`recon view` or press `v`)
+### Tamagotchi View (`roostr view` or press `v`)
 
 A visual dashboard where each agent is a pixel-art creature living in a room. Designed for a side monitor — glance over and instantly see who's working, sleeping, or needs attention.
 
@@ -28,13 +28,13 @@ Creatures are rendered as colored pixel art using half-block characters. Working
 ### Table View (default)
 
 ```
-┌─ recon — Claude Code Sessions ──────────────────────────────────────────────────────────────────────────┐
+┌─ roostr — Claude Code Sessions ─────────────────────────────────────────────────────────────────────────┐
 │  #  Session          Git(Project::Branch)   Directory          Status  Model       Context  Last Active │
 │  1  api-refactor     myapp::feat/auth       ~/repos/myapp      ● Input Opus 4.6    45k/1M   2m ago      │
 │  2  debug-pipeline   infra::main            ~/repos/infra      ● Work  Sonnet 4.6  12k/200k < 1m        │
 │  3  write-tests      myapp::feat/auth       ~/repos/myapp      ● Work  Haiku 4.5   8k/200k  < 1m        │
 │  4  code-review      webapp::pr-452         ~/repos/webapp     ● Idle  Sonnet 4.6  90k/200k 5m ago      │
-│  5  scratch          recon::main            ~/repos/recon      ● Idle  Opus 4.6    3k/1M    10m ago     │
+│  5  scratch          roostr::main           ~/repos/roostr     ● Idle  Opus 4.6    3k/1M    10m ago     │
 │  6  new-session      dotfiles::main         ~/repos/dotfiles   ● New   —           —        —           │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 j/k navigate  Enter switch  / search  v view  q quit
@@ -47,7 +47,7 @@ j/k navigate  Enter switch  / search  v view  q quit
 
 ## How it works
 
-recon is built around **tmux**. Each Claude Code instance runs in its own tmux session.
+roostr is built around **tmux**. Each Claude Code instance runs in its own tmux session.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -66,7 +66,7 @@ recon is built around **tmux**. Each Claude Code instance runs in its own tmux s
            │                  │                  │
            ▼                  ▼                  ▼
      ┌──────────────────────────────────────────────┐
-     │                 recon (TUI)                   │
+     │                 roostr (TUI)                  │
      │                                               │
      │  reads:                                       │
      │   • tmux list-panes → PID, session name       │
@@ -98,60 +98,60 @@ Requires tmux and [Claude Code](https://claude.ai/claude-code).
 ## Usage
 
 ```bash
-recon                                        # Table dashboard
-recon view                                   # Tamagotchi visual dashboard
-recon json                                   # JSON output (for scripting)
-recon launch                                 # Create a new claude session (background)
-recon launch --name foo --cwd ~/repos/myapp  # Custom name and directory
-recon launch --command "claude --model sonnet" --attach  # Custom command, attach to session
-recon launch --tag env:staging --tag role:reviewer       # Tag a session (key:value metadata)
-recon json --tag role:reviewer               # Filter JSON output by tag (must match all)
-recon new                                    # Interactive new session form
-recon resume                                 # Interactive resume picker
-recon resume --id <session-id>               # Resume a specific session
-recon resume --id <session-id> --name foo    # Resume with a custom tmux session name
-recon next                                   # Jump to the next agent waiting for input
-recon park                                   # Save all live sessions to disk
-recon unpark                                 # Restore previously parked sessions
-recon daemon                                 # Run the summarizer in the background
-recon daemon --interval 30                   # Custom poll interval (seconds)
+roostr                                        # Table dashboard
+roostr view                                   # Tamagotchi visual dashboard
+roostr json                                   # JSON output (for scripting)
+roostr launch                                 # Create a new claude session (background)
+roostr launch --name foo --cwd ~/repos/myapp  # Custom name and directory
+roostr launch --command "claude --model sonnet" --attach  # Custom command, attach to session
+roostr launch --tag env:staging --tag role:reviewer       # Tag a session (key:value metadata)
+roostr json --tag role:reviewer               # Filter JSON output by tag (must match all)
+roostr new                                    # Interactive new session form
+roostr resume                                 # Interactive resume picker
+roostr resume --id <session-id>               # Resume a specific session
+roostr resume --id <session-id> --name foo    # Resume with a custom tmux session name
+roostr next                                   # Jump to the next agent waiting for input
+roostr park                                   # Save all live sessions to disk
+roostr unpark                                 # Restore previously parked sessions
+roostr daemon                                 # Run the summarizer in the background
+roostr daemon --interval 30                   # Custom poll interval (seconds)
 ```
 
 ## Daemon
 
-`recon daemon` runs the summarizer continuously in the background. It polls active Claude Code sessions, sends new transcripts to a summarizer backend (local Ollama or the Anthropic API), and writes generated labels to `~/.cache/recon/labels`. Those labels then show up in both the table and Tamagotchi views.
+`roostr daemon` runs the summarizer continuously in the background. It polls active Claude Code sessions, sends new transcripts to a summarizer backend (local Ollama or the Anthropic API), and writes generated labels to `~/.cache/roostr/labels`. Those labels then show up in both the table and Tamagotchi views.
 
 The daemon needs at least one backend configured via environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `RECON_SUMMARIZER` | auto | `ollama`, `anthropic`, `claude`, or unset (auto-detect) |
-| `RECON_OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
-| `RECON_OLLAMA_MODEL` | `gemma2:2b` | Ollama model |
+| `ROOSTR_SUMMARIZER` | auto | `ollama`, `anthropic`, `claude`, or unset (auto-detect) |
+| `ROOSTR_OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
+| `ROOSTR_OLLAMA_MODEL` | `gemma2:2b` | Ollama model |
 | `ANTHROPIC_API_KEY` | — | Required for the Anthropic backend |
-| `RECON_ANTHROPIC_MODEL` | — | Override the Anthropic model |
-| `RECON_CLAUDE_BINARY` | `claude` | Claude CLI path (claude backend) |
-| `RECON_CLAUDE_MODEL` | — | Claude CLI model override |
+| `ROOSTR_ANTHROPIC_MODEL` | — | Override the Anthropic model |
+| `ROOSTR_CLAUDE_BINARY` | `claude` | Claude CLI path (claude backend) |
+| `ROOSTR_CLAUDE_MODEL` | — | Claude CLI model override |
 
 If neither Ollama nor `ANTHROPIC_API_KEY` is reachable, the daemon exits with an error.
 
 ### Run on system startup — Linux (systemd user service)
 
-Create `~/.config/systemd/user/recon-daemon.service`:
+Create `~/.config/systemd/user/roostr-daemon.service`:
 
 ```ini
 [Unit]
-Description=recon summarizer daemon
+Description=roostr summarizer daemon
 After=default.target
 
 [Service]
 Type=simple
-ExecStart=%h/.cargo/bin/recon daemon --interval 10
+ExecStart=%h/.cargo/bin/roostr daemon --interval 10
 Restart=on-failure
 RestartSec=5
 # Pick one backend. Either point at a running Ollama instance:
-Environment=RECON_OLLAMA_URL=http://localhost:11434
-Environment=RECON_OLLAMA_MODEL=gemma2:2b
+Environment=ROOSTR_OLLAMA_URL=http://localhost:11434
+Environment=ROOSTR_OLLAMA_MODEL=gemma2:2b
 # …or use the Anthropic API (uncomment and set your key):
 # Environment=ANTHROPIC_API_KEY=sk-ant-...
 
@@ -163,9 +163,9 @@ Enable and start it:
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now recon-daemon.service
-systemctl --user status recon-daemon.service
-journalctl --user -u recon-daemon.service -f      # follow logs
+systemctl --user enable --now roostr-daemon.service
+systemctl --user status roostr-daemon.service
+journalctl --user -u roostr-daemon.service -f      # follow logs
 ```
 
 To make the service start at boot (without you logging in), enable lingering once:
@@ -178,7 +178,7 @@ The daemon talks to your tmux server, so it must run as your user — not as a r
 
 ### Run on system startup — macOS (launchd LaunchAgent)
 
-Create `~/Library/LaunchAgents/com.recon.daemon.plist`:
+Create `~/Library/LaunchAgents/com.roostr.daemon.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -186,11 +186,11 @@ Create `~/Library/LaunchAgents/com.recon.daemon.plist`:
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.recon.daemon</string>
+    <string>com.roostr.daemon</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/YOUR_USERNAME/.cargo/bin/recon</string>
+        <string>/Users/YOUR_USERNAME/.cargo/bin/roostr</string>
         <string>daemon</string>
         <string>--interval</string>
         <string>10</string>
@@ -201,9 +201,9 @@ Create `~/Library/LaunchAgents/com.recon.daemon.plist`:
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <!-- Pick one backend: -->
-        <key>RECON_OLLAMA_URL</key>
+        <key>ROOSTR_OLLAMA_URL</key>
         <string>http://localhost:11434</string>
-        <key>RECON_OLLAMA_MODEL</key>
+        <key>ROOSTR_OLLAMA_MODEL</key>
         <string>gemma2:2b</string>
         <!-- Or set ANTHROPIC_API_KEY here instead. -->
     </dict>
@@ -214,9 +214,9 @@ Create `~/Library/LaunchAgents/com.recon.daemon.plist`:
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/recon-daemon.out.log</string>
+    <string>/tmp/roostr-daemon.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/recon-daemon.err.log</string>
+    <string>/tmp/roostr-daemon.err.log</string>
 </dict>
 </plist>
 ```
@@ -224,15 +224,15 @@ Create `~/Library/LaunchAgents/com.recon.daemon.plist`:
 Replace `YOUR_USERNAME` with your macOS short name. Then load it:
 
 ```bash
-launchctl load -w ~/Library/LaunchAgents/com.recon.daemon.plist
-launchctl list | grep com.recon.daemon                # check it's running
-tail -f /tmp/recon-daemon.err.log                     # follow logs
+launchctl load -w ~/Library/LaunchAgents/com.roostr.daemon.plist
+launchctl list | grep com.roostr.daemon                # check it's running
+tail -f /tmp/roostr-daemon.err.log                     # follow logs
 ```
 
 To stop or remove it:
 
 ```bash
-launchctl unload -w ~/Library/LaunchAgents/com.recon.daemon.plist
+launchctl unload -w ~/Library/LaunchAgents/com.roostr.daemon.plist
 ```
 
 LaunchAgents run as your user when you log in, which is required so the daemon can reach your tmux server.
@@ -266,16 +266,16 @@ LaunchAgents run as your user when you log in, which is required so the daemon c
 
 ## tmux config
 
-The included `tmux.conf` provides keybindings to open recon as a popup overlay:
+The included `tmux.conf` provides keybindings to open roostr as a popup overlay:
 
 ```bash
 # Add to your ~/.tmux.conf — capital letters chosen so default tmux
 # bindings (e.g. prefix + n = next-window) stay intact.
-bind G display-popup -E -w 80% -h 60% "recon"        # prefix + G → dashboard
-bind N display-popup -E -w 80% -h 60% "recon new"    # prefix + N → new session
-bind i run-shell "recon next"                         # prefix + i → jump to next input agent
-bind e run-shell "recon dock-focus"                  # prefix + e → focus dock sidebar (spawn if missing)
-bind E run-shell "recon dock-toggle"                 # prefix + E → toggle dock sidebar (open/close)
+bind G display-popup -E -w 80% -h 60% "roostr"       # prefix + G → dashboard
+bind N display-popup -E -w 80% -h 60% "roostr new"    # prefix + N → new session
+bind i run-shell "roostr next"                         # prefix + i → jump to next input agent
+bind e run-shell "roostr dock-focus"                  # prefix + e → focus dock sidebar (spawn if missing)
+bind E run-shell "roostr dock-toggle"                 # prefix + E → toggle dock sidebar (open/close)
 bind X confirm-before -p "Kill session #S? (y/n)" kill-session
 ```
 
@@ -283,21 +283,21 @@ This lets you pop open the dashboard from any tmux session, pick a session with 
 
 ## Known Limitations
 
-- **`/clear` resets session tracking** — Claude Code's `/clear` command creates a new JSONL file without updating the session-to-process mapping. After `/clear`, recon may show stale data (old tokens, old timestamps) until the session is restarted. Workaround: kill the session in recon and create a new one.
-- **macOS TCC prompts** — recon runs `git -C <session-cwd>` to derive project name and branch. If a session's CWD is under a TCC-protected directory (`~/Pictures`, `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Music`, `~/Movies`), recon skips git enrichment to avoid permission prompts. To re-enable git for specific paths under those dirs, set `RECON_TCC_ALLOW` to a comma-separated list of absolute prefixes:
+- **`/clear` resets session tracking** — Claude Code's `/clear` command creates a new JSONL file without updating the session-to-process mapping. After `/clear`, roostr may show stale data (old tokens, old timestamps) until the session is restarted. Workaround: kill the session in roostr and create a new one.
+- **macOS TCC prompts** — roostr runs `git -C <session-cwd>` to derive project name and branch. If a session's CWD is under a TCC-protected directory (`~/Pictures`, `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Music`, `~/Movies`), roostr skips git enrichment to avoid permission prompts. To re-enable git for specific paths under those dirs, set `ROOSTR_TCC_ALLOW` to a comma-separated list of absolute prefixes:
 
   ```bash
-  export RECON_TCC_ALLOW=/Users/me/Documents/code,/Users/me/Desktop/work
+  export ROOSTR_TCC_ALLOW=/Users/me/Documents/code,/Users/me/Desktop/work
   ```
 
 ## Contribution Policy
 
-This project is not accepting code contributions (Pull Requests) at this time.
+Issues and pull requests welcome. Please open an [Issue](https://github.com/marcoskichel/roostr/issues) for bug reports or feature requests.
 
-Due to the sensitive nature of reconnaissance and session tracking, I prefer to maintain full control over the codebase to ensure security and auditability.
+## Origin
 
-Ideas and feedback are welcome! Please open an [Issue](https://github.com/gavraz/recon/issues) if you have a feature request or have found a bug. If I like an idea, I will implement it myself.
+`roostr` is a fork of [gavraz/recon](https://github.com/gavraz/recon), forked at v0.6.1 and renamed to mark divergence in performance, UI, and feature set. Thanks to [@gavraz](https://github.com/gavraz) for the original work. See [`NOTICE`](NOTICE) for details.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

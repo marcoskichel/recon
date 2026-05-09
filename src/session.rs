@@ -508,7 +508,7 @@ static BRANCH_CACHE: Mutex<Option<HashMap<String, BranchInfo>>> = Mutex::new(Non
 
 const BRANCH_CACHE_TTL: Duration = Duration::from_secs(300);
 
-/// Allowlist parsed from `RECON_TCC_ALLOW` (comma-separated absolute paths).
+/// Allowlist parsed from `ROOSTR_TCC_ALLOW` (comma-separated absolute paths).
 ///
 /// Any CWD under one of these prefixes bypasses the TCC-protected check —
 /// useful when the user keeps real projects under `~/Documents` or `~/Desktop`
@@ -516,7 +516,7 @@ const BRANCH_CACHE_TTL: Duration = Duration::from_secs(300);
 fn tcc_allow_paths() -> &'static [PathBuf] {
     static CACHE: OnceLock<Vec<PathBuf>> = OnceLock::new();
     CACHE.get_or_init(|| {
-        std::env::var("RECON_TCC_ALLOW")
+        std::env::var("ROOSTR_TCC_ALLOW")
             .ok()
             .map(|v| {
                 v.split(',')
@@ -550,10 +550,10 @@ fn is_tcc_protected_with(path: &Path, home: Option<&Path>, allow: &[PathBuf]) ->
 /// Returns true if `path` is inside a macOS TCC-protected directory.
 ///
 /// Running `git -C <path>` inside these dirs triggers system permission
-/// prompts (Photos, Desktop, Documents, Downloads, etc.) even when recon
+/// prompts (Photos, Desktop, Documents, Downloads, etc.) even when roostr
 /// has no legitimate need to access those files.
 ///
-/// Override via `RECON_TCC_ALLOW=/abs/path1,/abs/path2`.
+/// Override via `ROOSTR_TCC_ALLOW=/abs/path1,/abs/path2`.
 fn is_tcc_protected(path: &Path) -> bool {
     is_tcc_protected_with(path, dirs::home_dir().as_deref(), tcc_allow_paths())
 }
@@ -1019,13 +1019,13 @@ fn parse_jsonl(
 /// continues appending to the original JSONL (named after the old session-id).
 ///
 /// Strategy (in order):
-///  1. Read `RECON_RESUMED_FROM` from the tmux session environment — set by
-///     `recon --resume` at session creation time. Reliable and zero-overhead.
-///  2. Fall back to parsing `ps` args for sessions started outside of recon
+///  1. Read `ROOSTR_RESUMED_FROM` from the tmux session environment — set by
+///     `roostr --resume` at session creation time. Reliable and zero-overhead.
+///  2. Fall back to parsing `ps` args for sessions started outside of roostr
 ///     (e.g. the user ran `claude --resume <id>` in a tmux session manually).
 fn find_jsonl_for_resumed_session(tmux_session: &str, pid: i32) -> Option<PathBuf> {
-    // Try tmux environment variable first (set by recon --resume)
-    let original_id = read_tmux_env(tmux_session, "RECON_RESUMED_FROM")
+    // Try tmux environment variable first (set by roostr --resume)
+    let original_id = read_tmux_env(tmux_session, "ROOSTR_RESUMED_FROM")
         // Fall back to parsing ps args
         .or_else(|| parse_resume_id_from_ps(pid))?;
 
@@ -1048,7 +1048,7 @@ fn read_tmux_env(session_name: &str, var: &str) -> Option<String> {
 }
 
 /// Parse `--resume <session-id>` from the process command line via ps.
-/// Fallback for sessions not created by `recon --resume`.
+/// Fallback for sessions not created by `roostr --resume`.
 fn parse_resume_id_from_ps(pid: i32) -> Option<String> {
     let output = std::process::Command::new("ps")
         .args(["-p", &pid.to_string(), "-o", "args="])
@@ -1305,7 +1305,7 @@ fn discover_claude_tmux_panes() -> Vec<(i32, String, String, String)> {
             || command == "node";
 
         if is_claude {
-            // pane_pid is the initial process — it may be claude itself (recon launch)
+            // pane_pid is the initial process — it may be claude itself (roostr launch)
             // or a shell with claude as the foreground child (manual `claude` in a terminal).
             // Try the pane PID first, fall back to searching children.
             let claude_pid = if session_pids.contains(&pid) {

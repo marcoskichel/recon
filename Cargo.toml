@@ -1,7 +1,15 @@
 [package]
-name = "recon"
-version = "0.6.1"
+name = "roostr"
+version = "0.7.0"
 edition = "2021"
+authors = ["Marcos Kichel <marcos.kichel@gmail.com>"]
+description = "tmux-native dashboard for managing Claude Code agents"
+repository = "https://github.com/marcoskichel/roostr"
+homepage = "https://github.com/marcoskichel/roostr"
+license = "MIT"
+readme = "README.md"
+keywords = ["tmux", "claude", "tui", "dashboard", "ratatui"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 ratatui = "0.29"

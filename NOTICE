@@ -1,0 +1,21 @@
+roostr
+Copyright (c) 2026 Marcos Kichel
+
+This project is a fork of recon by gavraz:
+  https://github.com/gavraz/recon
+
+Forked at commit d71068a (after upstream v0.6.1) and substantially
+extended. Original code is licensed under the MIT License; see LICENSE.
+
+Notable changes since fork point:
+- Performance: TUI startup ~80x faster, refresh ~2x faster
+- Interactive sidebar dock with mini sprites
+- Sprite names, collision-avoidance, rename UI
+- Keybindings: g (lazygit), d (diffnav), D (dash)
+- Renamed from "recon" to "roostr" to mark divergence
+
+Configuration paths and binary name changed:
+- ~/.config/recon/  →  ~/.config/roostr/
+- ~/.cache/recon/   →  ~/.cache/roostr/
+- ~/.cargo/bin/recon → ~/.cargo/bin/roostr
+Run `cargo uninstall recon` before installing roostr if upgrading.

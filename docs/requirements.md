@@ -1,4 +1,4 @@
-# recon — Claude Code Session Monitor
+# roostr — Claude Code Session Monitor
 
 ## Overview
 
@@ -8,7 +8,7 @@ A Rust TUI dashboard that monitors active Claude Code sessions, showing their st
 
 ### Primary: Claude Code Hooks
 
-Claude Code fires lifecycle events (`SessionStart`, `Stop`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`) via its hooks system. We configure hooks in `~/.claude/settings.json` to write JSONL events to a shared file that recon tails.
+Claude Code fires lifecycle events (`SessionStart`, `Stop`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`) via its hooks system. We configure hooks in `~/.claude/settings.json` to write JSONL events to a shared file that roostr tails.
 
 ### Secondary: Session JSONL Files
 
@@ -95,7 +95,7 @@ Warp's custom renderer does not expose individual tabs as AX elements. Tabs with
 └─────────────────┘                               │ tail
                                                   ▼
 ┌─────────────────┐     session JSONL      ┌──────────────┐
-│ ~/.claude/      │ ◄──── read ──────────  │   recon TUI  │
+│ ~/.claude/      │ ◄──── read ──────────  │   roostr TUI  │
 │ projects/       │                        │              │
 └─────────────────┘     process info       │  ratatui +   │
 ┌─────────────────┐ ◄──── sysinfo ───────  │  crossterm + │

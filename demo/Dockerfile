@@ -10,11 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux nodejs git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/target/release/recon /usr/local/bin/recon
+COPY --from=builder /build/target/release/roostr /usr/local/bin/roostr
 COPY demo/demo.sh /demo/demo.sh
 COPY demo/tapes /demo/tapes
 COPY tmux.conf /root/.tmux.conf
 
-RUN chmod +x /usr/local/bin/recon /demo/demo.sh
+RUN chmod +x /usr/local/bin/roostr /demo/demo.sh
 
 WORKDIR /demo

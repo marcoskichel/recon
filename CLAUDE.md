@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 cargo build                    # Debug build
-cargo install --path .         # Install to ~/.cargo/bin/recon
+cargo install --path .         # Install to ~/.cargo/bin/roostr
 ./tests/e2e_states.sh          # E2E tests (creates real tmux sessions with claude)
 ```
 
@@ -14,7 +14,7 @@ The e2e tests require `jq`, `claude`, and a running tmux server. They create ses
 
 ## Architecture
 
-recon is a TUI dashboard that monitors Claude Code sessions running in tmux. It polls every 2 seconds.
+roostr is a TUI dashboard that monitors Claude Code sessions running in tmux. It polls every 2 seconds.
 
 ### Data flow
 
@@ -52,7 +52,7 @@ Process-to-session matching uses `~/.claude/sessions/{PID}.json` files written b
 - **model.rs** — model ID → context window mapping
 - **summarizer.rs** — background LLM labeller (Ollama or Anthropic) feeding agent-card labels
 - **view_lock.rs** — pidfile so daemon pauses while TUI is active
-- **cli.rs** — clap definitions: `recon` (TUI) and `recon daemon`
+- **cli.rs** — clap definitions: `roostr` (TUI) and `roostr daemon`
 
 ### Key caches
 

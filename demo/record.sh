@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# record.sh — Build and record the recon demo GIF inside Docker.
+# record.sh — Build and record the roostr demo GIF inside Docker.
 #
 # Usage: ./demo/record.sh
 #
@@ -11,12 +11,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-echo "=== Building Docker image (compiles recon inside container) ==="
-docker build -t recon-demo -f "$SCRIPT_DIR/Dockerfile" "$REPO_DIR"
+echo "=== Building Docker image (compiles roostr inside container) ==="
+docker build -t roostr-demo -f "$SCRIPT_DIR/Dockerfile" "$REPO_DIR"
 
 echo "=== Recording demo ==="
 mkdir -p "$REPO_DIR/assets"
-docker run --rm --entrypoint bash -v "$REPO_DIR/assets:/output" recon-demo -c '
+docker run --rm --entrypoint bash -v "$REPO_DIR/assets:/output" roostr-demo -c '
     # Ensure claude dirs exist
     mkdir -p /root/.claude/sessions /root/.claude/projects
 

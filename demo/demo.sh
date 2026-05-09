@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# demo.sh — Set up fake claude sessions for a recon demo.
+# demo.sh — Set up fake claude sessions for a roostr demo.
 #
 # Creates 6 agents across 4 rooms with all states (New, Working, Idle, Input).
 # Includes a monorepo subdirectory room to showcase relative_dir grouping.
 # No real claude/API calls — uses node processes + fake session files.
 #
 # Usage:
-#   ./demo/demo.sh          # Set up + launch recon interactively
+#   ./demo/demo.sh          # Set up + launch roostr interactively
 #   ./demo/demo.sh --setup  # Set up only (for vhs recording in another terminal)
 #
 # Press Ctrl-C to clean up.
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 RID=$(head -c 100 /dev/urandom | LC_ALL=C tr -dc 'a-z0-9' | head -c 4)
-TMPDIR_BASE="/tmp/recon-demo-${RID}"
+TMPDIR_BASE="/tmp/roostr-demo-${RID}"
 SESSIONS_DIR="$HOME/.claude/sessions"
 PROJECTS_DIR="$HOME/.claude/projects"
 
@@ -229,10 +229,10 @@ echo "  Room 4: mobile-app (feat/onboarding)   — 1 agent:  New"
 echo ""
 
 if [[ "${1:-}" == "--setup" ]]; then
-    echo "Run recon in another terminal. Press Ctrl-C to clean up."
+    echo "Run roostr in another terminal. Press Ctrl-C to clean up."
     while true; do sleep 60; done
 else
-    echo "Launching recon... (Ctrl-C to exit and clean up)"
+    echo "Launching roostr... (Ctrl-C to exit and clean up)"
     sleep 1
-    recon
+    roostr
 fi

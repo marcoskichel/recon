@@ -187,7 +187,7 @@ fn unix_now() -> u64 {
 
 fn cache_dir() -> Option<PathBuf> {
     let mut p = dirs::cache_dir()?;
-    p.push("recon");
+    p.push("roostr");
     p.push("labels");
     let _ = fs::create_dir_all(&p);
     Some(p)
@@ -222,23 +222,23 @@ fn load_cache_into(store: &LabelStore) {
 }
 
 fn select_backend() -> Option<Backend> {
-    let mode = std::env::var("RECON_SUMMARIZER")
+    let mode = std::env::var("ROOSTR_SUMMARIZER")
         .ok()
         .map(|s| s.to_lowercase())
         .unwrap_or_else(|| "auto".to_string());
 
-    let ollama_url = std::env::var("RECON_OLLAMA_URL")
+    let ollama_url = std::env::var("ROOSTR_OLLAMA_URL")
         .unwrap_or_else(|_| OLLAMA_DEFAULT_URL.to_string());
-    let ollama_model = std::env::var("RECON_OLLAMA_MODEL")
+    let ollama_model = std::env::var("ROOSTR_OLLAMA_MODEL")
         .unwrap_or_else(|_| OLLAMA_DEFAULT_MODEL.to_string());
 
     let anthropic_key = std::env::var("ANTHROPIC_API_KEY").ok().filter(|k| !k.is_empty());
-    let anthropic_model = std::env::var("RECON_ANTHROPIC_MODEL")
+    let anthropic_model = std::env::var("ROOSTR_ANTHROPIC_MODEL")
         .unwrap_or_else(|_| ANTHROPIC_MODEL.to_string());
 
-    let claude_binary = std::env::var("RECON_CLAUDE_BINARY")
+    let claude_binary = std::env::var("ROOSTR_CLAUDE_BINARY")
         .unwrap_or_else(|_| CLAUDE_CLI_DEFAULT_BINARY.to_string());
-    let claude_model = std::env::var("RECON_CLAUDE_MODEL")
+    let claude_model = std::env::var("ROOSTR_CLAUDE_MODEL")
         .unwrap_or_else(|_| CLAUDE_CLI_DEFAULT_MODEL.to_string());
 
     let try_ollama = || -> Option<Backend> {

@@ -42,7 +42,7 @@ pub fn create_session(name: &str, cwd: &str, command: Option<&str>, tags: &[Stri
     if !tags.is_empty() {
         let tags_val = tags.join(",");
         tmux_args.push("-e".to_string());
-        tmux_args.push(format!("RECON_TAGS={tags_val}"));
+        tmux_args.push(format!("ROOSTR_TAGS={tags_val}"));
     }
 
     match command {
