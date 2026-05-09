@@ -189,11 +189,11 @@ The daemon talks to your tmux server, so it must run as your user — not as a r
 
 `roostr setup tmux` installs the bundled keybindings — it writes the config to `~/.config/roostr/tmux.conf` and appends a `source-file` line to your `~/.tmux.conf`. Re-run with `--force` to overwrite a divergent config.
 
-Capital letters are chosen so default tmux bindings (e.g. `prefix + n` = next-window) stay intact.
+Lowercase `a` (unbound in default tmux) and capital letters are chosen so default tmux bindings (e.g. `prefix + n` = next-window) stay intact.
 
 | Keybind | Action |
 |---|---|
-| `prefix + G` | Toggle the dashboard tmux window (focus / open / close) |
+| `prefix + a` | Toggle the dashboard tmux window (focus / open / close) |
 | `prefix + N` | Open the new-session form as a popup |
 | `prefix + i` | Jump to the next agent waiting for input |
 | `prefix + e` | Focus the dock sidebar (spawn if missing) |
