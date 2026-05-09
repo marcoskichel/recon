@@ -1699,7 +1699,11 @@ fn render_dock_card(
         return;
     }
 
-    let border_color = if is_selected {
+    let border_color = if session.status == SessionStatus::Input {
+        // Pulse Yellow/White each tick — same "glow" as room border in
+        // the expanded view. Catches the eye when input is needed.
+        if tick % 2 == 0 { Color::Yellow } else { Color::White }
+    } else if is_selected {
         Color::Cyan
     } else {
         Color::Rgb(60, 60, 70)
