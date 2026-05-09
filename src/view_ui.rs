@@ -1699,8 +1699,9 @@ pub fn render_dock(frame: &mut Frame, app: &App) {
         .collect();
 
     if indices.is_empty() {
+        let label = if !app.loaded { "loading…" } else { "no sessions" };
         frame.render_widget(
-            Paragraph::new(Span::styled("no sessions", Style::default().fg(Color::DarkGray)))
+            Paragraph::new(Span::styled(label, Style::default().fg(Color::DarkGray)))
                 .alignment(Alignment::Center),
             area,
         );
@@ -1854,7 +1855,11 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
     let rooms = group_into_rooms_stable(&app.sessions, &app.filtered_indices(), &app.view_room_order);
 
     if rooms.is_empty() {
-        render_empty(frame, area, app.tick);
+        if !app.loaded {
+            render_loading(frame, area, app.tick);
+        } else {
+            render_empty(frame, area, app.tick);
+        }
         return;
     }
 
@@ -2385,6 +2390,24 @@ fn render_empty(frame: &mut Frame, area: Rect, _tick: u64) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "No active sessions",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let paragraph = Paragraph::new(lines).alignment(Alignment::Center);
+    frame.render_widget(paragraph, area);
+}
+
+fn render_loading(frame: &mut Frame, area: Rect, tick: u64) {
+    let frame_idx = (tick / 3) as usize;
+    let (sprite, palette) = sprite_data(&SessionStatus::Working, frame_idx, 0);
+    let dots = ".".repeat(((tick / 4) % 4) as usize);
+    let label = format!("Loading{:<3}", dots);
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+    lines.extend(render_sprite_lines(sprite, palette));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        label,
         Style::default().fg(Color::DarkGray),
     )));
 

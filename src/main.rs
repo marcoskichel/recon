@@ -411,7 +411,6 @@ fn dock_selected_session_id(app: &App) -> Option<String> {
 
 fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
     let mut app = App::new();
-    app.refresh();
 
     let (tx, rx) = mpsc::channel::<Vec<Session>>();
     let initial_prev = app.snapshot_prev();

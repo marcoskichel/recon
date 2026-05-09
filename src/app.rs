@@ -32,6 +32,7 @@ pub struct App {
     pub rename_session_id: Option<String>,
     pub rename_text: String,
     pub rename_cursor: usize,
+    pub loaded: bool,
     prev_sessions: HashMap<String, Session>,
 }
 
@@ -66,6 +67,7 @@ impl App {
             rename_session_id: None,
             rename_text: String::new(),
             rename_cursor: 0,
+            loaded: false,
             prev_sessions: HashMap::new(),
         }
     }
@@ -96,6 +98,7 @@ impl App {
     }
 
     pub fn apply_snapshot(&mut self, sessions: Vec<Session>) {
+        self.loaded = true;
         for s in &sessions {
             if !s.jsonl_path.as_os_str().is_empty() {
                 self.summarizer
