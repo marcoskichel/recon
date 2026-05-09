@@ -1729,6 +1729,12 @@ fn render_dock_card(
 
     // Status dot centered on bottom border
     if area.height >= 2 && area.width >= 3 {
+        let dot_color = match session.status {
+            SessionStatus::New => Color::Blue,
+            SessionStatus::Working => Color::Green,
+            SessionStatus::Idle => Color::Gray,
+            SessionStatus::Input => Color::Yellow,
+        };
         let dot_rect = Rect {
             x: area.x + area.width / 2,
             y: area.y + area.height - 1,
@@ -1738,7 +1744,7 @@ fn render_dock_card(
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "\u{25CF}",
-                Style::default().fg(status_color(&session.status)),
+                Style::default().fg(dot_color),
             )),
             dot_rect,
         );
