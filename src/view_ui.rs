@@ -1722,7 +1722,7 @@ fn render_dock_card(
 
     let chunks = Layout::vertical([
         Constraint::Length(MINI_SPRITE_H), // sprite
-        Constraint::Length(1),             // dot row
+        Constraint::Length(1),             // thin bar
     ])
     .split(inner);
 
@@ -1737,19 +1737,27 @@ fn render_dock_card(
         chunks[0],
     );
 
-    // Status dot centered inside card (above bottom border)
-    let dot_color = match session.status {
-        SessionStatus::New => Color::Blue,
-        SessionStatus::Working => Color::Green,
-        SessionStatus::Idle => Color::Rgb(110, 110, 120),
-        SessionStatus::Input => Color::Yellow,
+    // Thin token-usage bar — lower 1/8 block so it looks like a slim
+    // strip at the bottom of its row instead of filling the whole cell.
+    let ratio = session.token_ratio();
+    let bar_color = if ratio > 0.75 {
+        Color::Red
+    } else if ratio > 0.40 {
+        Color::Yellow
+    } else {
+        Color::Green
     };
+    let bar_w = chunks[1].width as usize;
+    let filled = (ratio * bar_w as f64).round().min(bar_w as f64) as usize;
+    let empty = bar_w.saturating_sub(filled);
     frame.render_widget(
-        Paragraph::new(Span::styled(
-            "\u{25CF}",
-            Style::default().fg(dot_color),
-        ))
-        .alignment(Alignment::Center),
+        Paragraph::new(Line::from(vec![
+            Span::styled("\u{2581}".repeat(filled), Style::default().fg(bar_color)),
+            Span::styled(
+                "\u{2581}".repeat(empty),
+                Style::default().fg(Color::Rgb(60, 60, 70)),
+            ),
+        ])),
         chunks[1],
     );
 
