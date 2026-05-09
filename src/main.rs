@@ -37,8 +37,84 @@ fn main() -> io::Result<()> {
         Some(Command::Dock) => run_dock(),
         Some(Command::DockToggle) => run_dock_toggle(),
         Some(Command::DockFocus) => run_dock_focus(),
+        Some(Command::DockInfo { session_id }) => run_dock_info(&session_id),
         None => run_tui(),
     }
+}
+
+fn run_dock_info(session_id: &str) -> io::Result<()> {
+    use crossterm::style::Stylize;
+    use std::io::Write;
+
+    let mut app = App::new();
+    app.refresh();
+
+    let session = app
+        .sessions
+        .iter()
+        .find(|s| s.session_id == session_id)
+        .cloned();
+
+    let mut out = io::stdout();
+
+    match session {
+        Some(s) => {
+            let title = s.tmux_session.clone().unwrap_or_else(|| "?".to_string());
+            let branch = s.branch.clone().unwrap_or_else(|| "-".to_string());
+            let model = s.model.clone().unwrap_or_else(|| "?".to_string());
+            let status_str = match s.status {
+                session::SessionStatus::New => "New",
+                session::SessionStatus::Working => "Working",
+                session::SessionStatus::Idle => "Idle",
+                session::SessionStatus::Input => "Input",
+            };
+            let total = s.total_input_tokens + s.total_output_tokens;
+            let pct = (s.token_ratio() * 100.0) as u32;
+            let summary = app
+                .summarizer
+                .store
+                .get(&s.session_id)
+                .filter(|t| !t.trim().is_empty())
+                .or_else(|| s.last_user_prompt.clone())
+                .unwrap_or_else(|| "(no summary yet)".to_string());
+
+            writeln!(out, "{}", format!("Session: {}", title).bold())?;
+            writeln!(out, "Branch:  {}", branch.as_str().green())?;
+            writeln!(out, "Status:  {}", status_str)?;
+            writeln!(out, "Model:   {}", model)?;
+            writeln!(
+                out,
+                "Tokens:  {pct}%  ({total} used; in {} / out {})",
+                s.total_input_tokens, s.total_output_tokens
+            )?;
+            if let Some(ref cwd) = Some(s.cwd.clone()) {
+                writeln!(out, "Cwd:     {}", cwd)?;
+            }
+            writeln!(out)?;
+            writeln!(out, "{}", "Summary".bold().underlined())?;
+            writeln!(out, "{}", summary)?;
+        }
+        None => {
+            writeln!(out, "Session not found: {}", session_id)?;
+        }
+    }
+
+    writeln!(out)?;
+    writeln!(out, "{}", "Press any key to close…".dim())?;
+    out.flush()?;
+
+    use crossterm::event::{self, Event};
+    use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+    enable_raw_mode().ok();
+    loop {
+        if event::poll(std::time::Duration::from_millis(500)).unwrap_or(false) {
+            if let Ok(Event::Key(_)) = event::read() {
+                break;
+            }
+        }
+    }
+    disable_raw_mode().ok();
+    Ok(())
 }
 
 fn run_dock_focus() -> io::Result<()> {
@@ -268,6 +344,24 @@ fn run_dock() -> io::Result<()> {
     Ok(())
 }
 
+fn dock_selected_session_id(app: &App) -> Option<String> {
+    let filtered = app.filtered_indices();
+    let rooms = view_ui::group_into_rooms_stable(
+        &app.sessions,
+        &filtered,
+        &app.view_room_order,
+    );
+    let indices: Vec<usize> = rooms
+        .into_iter()
+        .flat_map(|r| r.session_indices.into_iter())
+        .collect();
+    if indices.is_empty() {
+        return None;
+    }
+    let sel = app.view_selected_agent.min(indices.len() - 1);
+    Some(app.sessions[indices[sel]].session_id.clone())
+}
+
 fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
     let mut app = App::new();
     app.refresh();
@@ -284,6 +378,32 @@ fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::R
             loop {
                 if let Event::Key(key) = event::read()? {
                     use crossterm::event::{KeyCode, KeyModifiers};
+
+                    // `i` opens an info popup for the selected session.
+                    // Skip the rest of the key pipeline so the main key
+                    // handler doesn't see it.
+                    if !app.filter_active && matches!(key.code, KeyCode::Char('i')) {
+                        if let Some(session_id) = dock_selected_session_id(&app) {
+                            let _ = std::process::Command::new("tmux")
+                                .args([
+                                    "display-popup",
+                                    "-E",
+                                    "-w",
+                                    "70%",
+                                    "-h",
+                                    "60%",
+                                    "-T",
+                                    " Session detail ",
+                                    &format!("recon dock-info {}", session_id),
+                                ])
+                                .status();
+                        }
+                        if !event::poll(Duration::from_millis(0))? {
+                            break;
+                        }
+                        continue;
+                    }
+
                     let translated = if !app.filter_active {
                         let mut k = key;
                         k.code = match key.code {

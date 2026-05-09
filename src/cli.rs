@@ -26,4 +26,11 @@ pub enum Command {
     /// Focus the dock pane in the current tmux window. Spawns it if
     /// missing. Use this for a "jump-to-sidebar" keybind.
     DockFocus,
+    /// Print formatted session details, then wait for a keypress.
+    /// Designed to run inside `tmux display-popup` — invoked by the
+    /// dock when the user presses `i` on a selected card.
+    DockInfo {
+        /// Session id (from ~/.claude/projects/*.jsonl).
+        session_id: String,
+    },
 }
