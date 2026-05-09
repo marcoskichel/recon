@@ -30,7 +30,7 @@ const COMPACT_SPRITE_COLS: u16 = 12; // sprite (10) + 1 col gutter each side
 const MINI_SPRITE_W: u16 = (SPRITE_W as u16) / 2;          // 5 cols
 const MINI_SPRITE_H: u16 = (SPRITE_H as u16 + 2) / 3;      // 4 rows
 const DOCK_CARD_W: u16 = MINI_SPRITE_W + 4;                // sprite (5) + padding (2) + border (2) = 9
-const DOCK_CARD_H: u16 = MINI_SPRITE_H + 3;                // border (2) + sprite (4) + bar (1) = 7
+const DOCK_CARD_H: u16 = MINI_SPRITE_H + 2;                // border (2) + sprite (4) = 6
 
 // ── Pixel sprite data ────────────────────────────────────────────────
 // Each sprite is SPRITE_H rows x SPRITE_W cols. 0 = transparent.
@@ -1716,12 +1716,6 @@ fn render_dock_card(
         return;
     }
 
-    let chunks = Layout::vertical([
-        Constraint::Length(MINI_SPRITE_H),  // sprite (4)
-        Constraint::Length(1),              // bar
-    ])
-    .split(inner);
-
     // Sprite (sextant compact, centered)
     let offset = session_phase_offset(&session.session_id);
     let anim_frame = animation_frame(&session.status, tick + offset);
@@ -1730,30 +1724,7 @@ fn render_dock_card(
     let sprite_lines = render_sprite_compact(sprite, palette);
     frame.render_widget(
         Paragraph::new(sprite_lines).alignment(Alignment::Center),
-        chunks[0],
-    );
-
-    // Bar
-    let ratio = session.token_ratio();
-    let bar_color = if ratio > 0.75 {
-        Color::Red
-    } else if ratio > 0.40 {
-        Color::Yellow
-    } else {
-        Color::Green
-    };
-    let bar_w = chunks[1].width as usize;
-    let filled = (ratio * bar_w as f64).round().min(bar_w as f64) as usize;
-    let empty = bar_w.saturating_sub(filled);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("\u{2588}".repeat(filled), Style::default().fg(bar_color)),
-            Span::styled(
-                "\u{2588}".repeat(empty),
-                Style::default().fg(Color::Rgb(40, 40, 50)),
-            ),
-        ])),
-        chunks[1],
+        inner,
     );
 
     // [N] overlay on top border
