@@ -1882,9 +1882,9 @@ fn render_character(
         .map(sanitize_prompt)
         .filter(|s| !s.is_empty());
     let desc_style = if is_selected {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM)
     } else {
-        Style::default().fg(Color::White)
+        Style::default().fg(Color::Gray).add_modifier(Modifier::DIM)
     };
     if app.summarizer.enabled() {
         let desc = summary_owned.as_deref().or(prompt_owned.as_deref());
@@ -2075,14 +2075,19 @@ fn render_character_compact(
         truncate_str(&display_name, text_w),
         name_style,
     )));
+    let desc_style = Style::default()
+        .fg(Color::Gray)
+        .add_modifier(Modifier::DIM);
     if let Some(text) = desc {
-        let desc_lines = wrap_label(text, text_w, 1);
-        let desc_line = desc_lines.into_iter().next().unwrap_or_default();
-        lines.push(Line::from(Span::styled(
-            desc_line,
-            Style::default().fg(Color::White),
-        )));
+        let desc_lines = wrap_label(text, text_w, 2);
+        for line in desc_lines.iter().take(2) {
+            lines.push(Line::from(Span::styled(line.clone(), desc_style)));
+        }
+        while lines.len() < 3 {
+            lines.push(Line::from(""));
+        }
     } else {
+        lines.push(Line::from(""));
         lines.push(Line::from(""));
     }
     lines.push(Line::from(Span::styled(
