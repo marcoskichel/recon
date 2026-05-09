@@ -1727,6 +1727,23 @@ fn render_dock_card(
         inner,
     );
 
+    // Status dot centered on bottom border
+    if area.height >= 2 && area.width >= 3 {
+        let dot_rect = Rect {
+            x: area.x + area.width / 2,
+            y: area.y + area.height - 1,
+            width: 1,
+            height: 1,
+        };
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "\u{25CF}",
+                Style::default().fg(status_color(&session.status)),
+            )),
+            dot_rect,
+        );
+    }
+
     // [N] overlay on top border
     let label = format!("[{}]", index);
     let label_w = (label.chars().count() as u16).min(area.width.saturating_sub(2));
