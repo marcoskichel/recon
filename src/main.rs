@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod model;
 mod session;
+mod setup;
 mod state;
 mod summarizer;
 mod tmux;
@@ -40,6 +41,7 @@ fn main() -> io::Result<()> {
         Some(Command::DockFocus) => run_dock_focus(),
         Some(Command::DockInfo { session_id }) => run_dock_info(&session_id),
         Some(Command::Toggle) => run_toggle(),
+        Some(Command::Setup { action }) => setup::run(action),
         None => run_tui(),
     }
 }
