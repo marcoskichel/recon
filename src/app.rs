@@ -7,6 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 const STATUS_MESSAGE_TTL: Duration = Duration::from_secs(3);
 
 use crate::session::{self, Session};
+use crate::state::{self, PersistedState};
 use crate::summarizer::Summarizer;
 use crate::tmux;
 use crate::view_ui;
@@ -32,6 +33,7 @@ pub struct App {
     pub rename_session_id: Option<String>,
     pub rename_text: String,
     pub rename_cursor: usize,
+    pub loaded: bool,
     prev_sessions: HashMap<String, Session>,
 }
 
@@ -45,29 +47,50 @@ impl App {
     }
 
     fn with_summarizer(summarizer: Summarizer) -> Self {
+        let persisted = state::load();
+        let cached_sessions = persisted.sessions;
+        let loaded = !cached_sessions.is_empty();
+        let prev_sessions = cached_sessions
+            .iter()
+            .map(|s| (s.session_id.clone(), s.clone()))
+            .collect();
         App {
-            sessions: Vec::new(),
-            selected: 0,
+            sessions: cached_sessions,
+            selected: persisted.selected,
             should_quit: false,
             tick: 0,
-            view_zoomed_room: None,
-            view_zoom_index: None,
-            view_selected_agent: 0,
+            view_zoomed_room: persisted.view_zoomed_room,
+            view_zoom_index: persisted.view_zoom_index,
+            view_selected_agent: persisted.view_selected_agent,
             filter_active: false,
             filter_text: String::new(),
             filter_cursor: 0,
             view_chars_per_row: Cell::new(1),
-            view_room_order: Vec::new(),
+            view_room_order: persisted.view_room_order,
             summarizer,
             status_message: None,
-            species_assignments: HashMap::new(),
-            custom_names: HashMap::new(),
+            species_assignments: persisted.species_assignments,
+            custom_names: persisted.custom_names,
             rename_active: false,
             rename_session_id: None,
             rename_text: String::new(),
             rename_cursor: 0,
-            prev_sessions: HashMap::new(),
+            loaded,
+            prev_sessions,
         }
+    }
+
+    pub fn save_state(&self) {
+        state::save(&PersistedState {
+            selected: self.selected,
+            view_zoomed_room: self.view_zoomed_room.clone(),
+            view_zoom_index: self.view_zoom_index,
+            view_selected_agent: self.view_selected_agent,
+            view_room_order: self.view_room_order.clone(),
+            species_assignments: self.species_assignments.clone(),
+            custom_names: self.custom_names.clone(),
+            sessions: self.sessions.clone(),
+        });
     }
 
     pub fn set_status(&mut self, msg: impl Into<String>) {
@@ -96,6 +119,7 @@ impl App {
     }
 
     pub fn apply_snapshot(&mut self, sessions: Vec<Session>) {
+        self.loaded = true;
         for s in &sessions {
             if !s.jsonl_path.as_os_str().is_empty() {
                 self.summarizer
