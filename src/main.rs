@@ -57,6 +57,10 @@ fn run_dock_info(session_id: &str) -> io::Result<()> {
 
     let mut out = io::stdout();
 
+    let width = crossterm::terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
+    // Reserve a little inner padding from popup borders.
+    let inner_w = width.saturating_sub(4).max(40);
+
     match session {
         Some(s) => {
             let title = s.tmux_session.clone().unwrap_or_else(|| "?".to_string());
@@ -78,21 +82,28 @@ fn run_dock_info(session_id: &str) -> io::Result<()> {
                 .or_else(|| s.last_user_prompt.clone())
                 .unwrap_or_else(|| "(no summary yet)".to_string());
 
-            writeln!(out, "{}", format!("Session: {}", title).bold())?;
-            writeln!(out, "Branch:  {}", branch.as_str().green())?;
-            writeln!(out, "Status:  {}", status_str)?;
-            writeln!(out, "Model:   {}", model)?;
-            writeln!(
-                out,
-                "Tokens:  {pct}%  ({total} used; in {} / out {})",
-                s.total_input_tokens, s.total_output_tokens
-            )?;
-            if let Some(ref cwd) = Some(s.cwd.clone()) {
-                writeln!(out, "Cwd:     {}", cwd)?;
+            // === Summary first, big and bold — most important info. ===
+            writeln!(out)?;
+            writeln!(out, "  {}", "SUMMARY".dim().bold())?;
+            writeln!(out, "  {}", "─".repeat(inner_w.saturating_sub(2)).dim())?;
+            for line in wrap_text(&summary, inner_w.saturating_sub(2)) {
+                writeln!(out, "  {}", line.as_str().bold().cyan())?;
             }
             writeln!(out)?;
-            writeln!(out, "{}", "Summary".bold().underlined())?;
-            writeln!(out, "{}", summary)?;
+
+            // Compact metadata block — secondary.
+            writeln!(out, "  {} {}", "session".dim(), title.as_str().bold())?;
+            writeln!(out, "  {} {}", "branch ".dim(), branch.as_str().green())?;
+            writeln!(out, "  {} {}", "status ".dim(), status_str)?;
+            writeln!(out, "  {} {}", "model  ".dim(), model)?;
+            writeln!(
+                out,
+                "  {} {pct}%  ({total} used; in {} / out {})",
+                "tokens ".dim(),
+                s.total_input_tokens,
+                s.total_output_tokens
+            )?;
+            writeln!(out, "  {} {}", "cwd    ".dim(), s.cwd)?;
         }
         None => {
             writeln!(out, "Session not found: {}", session_id)?;
@@ -342,6 +353,42 @@ fn run_dock() -> io::Result<()> {
         eprintln!("Error: {e}");
     }
     Ok(())
+}
+
+fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
+    if max_width == 0 {
+        return vec![text.to_string()];
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        let word_w = word.chars().count();
+        let cur_w = current.chars().count();
+        let needed = if cur_w == 0 { word_w } else { cur_w + 1 + word_w };
+        if needed <= max_width {
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+        } else {
+            if !current.is_empty() {
+                out.push(std::mem::take(&mut current));
+            }
+            if word_w <= max_width {
+                current.push_str(word);
+            } else {
+                let chunk: String = word.chars().take(max_width).collect();
+                current = chunk;
+            }
+        }
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    if out.is_empty() {
+        out.push(String::new());
+    }
+    out
 }
 
 fn dock_selected_session_id(app: &App) -> Option<String> {
