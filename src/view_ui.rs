@@ -30,7 +30,7 @@ const COMPACT_SPRITE_COLS: u16 = 12; // sprite (10) + 1 col gutter each side
 const MINI_SPRITE_W: u16 = (SPRITE_W as u16) / 2;          // 5 cols
 const MINI_SPRITE_H: u16 = (SPRITE_H as u16 + 2) / 3;      // 4 rows
 const DOCK_CARD_W: u16 = MINI_SPRITE_W + 4;                // sprite (5) + padding (2) + border (2) = 9
-const DOCK_CARD_H: u16 = MINI_SPRITE_H + 2;                // border (2) + sprite (4) = 6
+const DOCK_CARD_H: u16 = MINI_SPRITE_H + 3;                // border (2) + sprite (4) + dot (1) = 7
 
 // ── Pixel sprite data ────────────────────────────────────────────────
 // Each sprite is SPRITE_H rows x SPRITE_W cols. 0 = transparent.
@@ -1716,6 +1716,12 @@ fn render_dock_card(
         return;
     }
 
+    let chunks = Layout::vertical([
+        Constraint::Length(MINI_SPRITE_H), // sprite
+        Constraint::Length(1),             // dot row
+    ])
+    .split(inner);
+
     // Sprite (sextant compact, centered)
     let offset = session_phase_offset(&session.session_id);
     let anim_frame = animation_frame(&session.status, tick + offset);
@@ -1724,31 +1730,24 @@ fn render_dock_card(
     let sprite_lines = render_sprite_compact(sprite, palette);
     frame.render_widget(
         Paragraph::new(sprite_lines).alignment(Alignment::Center),
-        inner,
+        chunks[0],
     );
 
-    // Status dot centered on bottom border
-    if area.height >= 2 && area.width >= 3 {
-        let dot_color = match session.status {
-            SessionStatus::New => Color::Blue,
-            SessionStatus::Working => Color::Green,
-            SessionStatus::Idle => Color::Gray,
-            SessionStatus::Input => Color::Yellow,
-        };
-        let dot_rect = Rect {
-            x: area.x + area.width / 2,
-            y: area.y + area.height - 1,
-            width: 1,
-            height: 1,
-        };
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                "\u{25CF}",
-                Style::default().fg(dot_color),
-            )),
-            dot_rect,
-        );
-    }
+    // Status dot centered inside card (above bottom border)
+    let dot_color = match session.status {
+        SessionStatus::New => Color::Blue,
+        SessionStatus::Working => Color::Green,
+        SessionStatus::Idle => Color::Gray,
+        SessionStatus::Input => Color::Yellow,
+    };
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            "\u{25CF}",
+            Style::default().fg(dot_color),
+        ))
+        .alignment(Alignment::Center),
+        chunks[1],
+    );
 
     // [N] overlay on top border
     let label = format!("[{}]", index);
