@@ -193,7 +193,7 @@ Capital letters are chosen so default tmux bindings (e.g. `prefix + n` = next-wi
 
 | Keybind | Action |
 |---|---|
-| `prefix + G` | Open the dashboard as a popup overlay |
+| `prefix + G` | Toggle the dashboard tmux window (focus / open / close) |
 | `prefix + N` | Open the new-session form as a popup |
 | `prefix + i` | Jump to the next agent waiting for input |
 | `prefix + e` | Focus the dock sidebar (spawn if missing) |
