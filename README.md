@@ -269,12 +269,14 @@ LaunchAgents run as your user when you log in, which is required so the daemon c
 The included `tmux.conf` provides keybindings to open recon as a popup overlay:
 
 ```bash
-# Add to your ~/.tmux.conf
-bind g display-popup -E -w 80% -h 60% "recon"        # prefix + g → dashboard
-bind n display-popup -E -w 80% -h 60% "recon new"    # prefix + n → new session
-bind r display-popup -E -w 80% -h 60% "recon resume" # prefix + r → resume picker
+# Add to your ~/.tmux.conf — capital letters chosen so default tmux
+# bindings (e.g. prefix + n = next-window) stay intact.
+bind G display-popup -E -w 80% -h 60% "recon"        # prefix + G → dashboard
+bind N display-popup -E -w 80% -h 60% "recon new"    # prefix + N → new session
+bind R display-popup -E -w 80% -h 60% "recon resume" # prefix + R → resume picker
 bind i run-shell "recon next"                         # prefix + i → jump to next input agent
-bind e run-shell "recon dock-toggle"                 # prefix + e → toggle dock sidebar
+bind e run-shell "recon dock-focus"                  # prefix + e → focus dock sidebar (spawn if missing)
+bind E run-shell "recon dock-toggle"                 # prefix + E → toggle dock sidebar (open/close)
 bind X confirm-before -p "Kill session #S? (y/n)" kill-session
 ```
 
