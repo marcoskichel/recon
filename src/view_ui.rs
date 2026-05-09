@@ -1737,7 +1737,7 @@ fn render_dock_card(
     let dot_color = match session.status {
         SessionStatus::New => Color::Blue,
         SessionStatus::Working => Color::Green,
-        SessionStatus::Idle => Color::Gray,
+        SessionStatus::Idle => Color::Rgb(110, 110, 120),
         SessionStatus::Input => Color::Yellow,
     };
     frame.render_widget(
