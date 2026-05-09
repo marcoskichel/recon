@@ -283,7 +283,7 @@ fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::R
         if event::poll(Duration::from_millis(100))? {
             loop {
                 if let Event::Key(key) = event::read()? {
-                    use crossterm::event::KeyCode;
+                    use crossterm::event::{KeyCode, KeyModifiers};
                     let translated = if !app.filter_active {
                         let mut k = key;
                         k.code = match key.code {
@@ -295,7 +295,21 @@ fn run_dock_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::R
                     } else {
                         key
                     };
+
+                    // Only q / Esc / Ctrl-C should quit the dock. Other
+                    // actions (Enter to switch, x to kill, 1-9 to jump,
+                    // n to new) set should_quit so the main TUI exits;
+                    // the dock should stay open in the background.
+                    let is_quit_key = match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => !app.filter_active,
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => true,
+                        _ => false,
+                    };
+                    let was_quit = app.should_quit;
                     app.handle_key(translated);
+                    if app.should_quit && !was_quit && !is_quit_key {
+                        app.should_quit = false;
+                    }
                 }
                 if !event::poll(Duration::from_millis(0))? {
                     break;
