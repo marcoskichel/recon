@@ -36,8 +36,63 @@ fn main() -> io::Result<()> {
         }
         Some(Command::Dock) => run_dock(),
         Some(Command::DockToggle) => run_dock_toggle(),
+        Some(Command::DockFocus) => run_dock_focus(),
         None => run_tui(),
     }
+}
+
+fn run_dock_focus() -> io::Result<()> {
+    use std::process::Command as ProcCommand;
+
+    let tmux = |args: &[&str]| -> io::Result<String> {
+        let out = ProcCommand::new("tmux").args(args).output()?;
+        if !out.status.success() {
+            let msg = String::from_utf8_lossy(&out.stderr).to_string();
+            return Err(io::Error::new(io::ErrorKind::Other, msg));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+
+    if std::env::var_os("TMUX").is_none() {
+        eprintln!("recon dock-focus: not inside tmux");
+        std::process::exit(1);
+    }
+
+    let win = tmux(&["display-message", "-p", "#{window_id}"])?;
+    let panes = tmux(&[
+        "list-panes",
+        "-t",
+        &win,
+        "-F",
+        "#{pane_id} #{pane_title}",
+    ])?;
+
+    let dock_pane = panes.lines().find_map(|line| {
+        let mut parts = line.splitn(2, ' ');
+        let id = parts.next()?;
+        let title = parts.next().unwrap_or("");
+        if title == "recon-dock" {
+            Some(id.to_string())
+        } else {
+            None
+        }
+    });
+
+    if let Some(id) = dock_pane {
+        tmux(&["select-pane", "-t", &id])?;
+    } else {
+        // No -d so the new pane takes focus.
+        tmux(&[
+            "split-window",
+            "-h",
+            "-l",
+            "9",
+            "-t",
+            &win,
+            "recon dock",
+        ])?;
+    }
+    Ok(())
 }
 
 fn run_dock_toggle() -> io::Result<()> {

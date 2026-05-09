@@ -23,4 +23,7 @@ pub enum Command {
     /// Toggle the dock pane (sidebar) in the current tmux window.
     /// Spawns it on the right if missing, kills it if present.
     DockToggle,
+    /// Focus the dock pane in the current tmux window. Spawns it if
+    /// missing. Use this for a "jump-to-sidebar" keybind.
+    DockFocus,
 }
