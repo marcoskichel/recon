@@ -273,7 +273,6 @@ The included `tmux.conf` provides keybindings to open recon as a popup overlay:
 # bindings (e.g. prefix + n = next-window) stay intact.
 bind G display-popup -E -w 80% -h 60% "recon"        # prefix + G → dashboard
 bind N display-popup -E -w 80% -h 60% "recon new"    # prefix + N → new session
-bind R display-popup -E -w 80% -h 60% "recon resume" # prefix + R → resume picker
 bind i run-shell "recon next"                         # prefix + i → jump to next input agent
 bind e run-shell "recon dock-focus"                  # prefix + e → focus dock sidebar (spawn if missing)
 bind E run-shell "recon dock-toggle"                 # prefix + E → toggle dock sidebar (open/close)
