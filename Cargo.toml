@@ -101,3 +101,4 @@ dirs = "6"
 clap = { version = "4", features = ["derive"] }
 ureq = { version = "2", features = ["json", "tls"], default-features = false }
 libc = "0.2"
+nix = { version = "0.29", features = ["signal"] }

@@ -2,7 +2,16 @@ too-many-lines-threshold       = 50
 too-many-arguments-threshold   = 4
 cognitive-complexity-threshold = 15
 min-ident-chars-threshold      = 3
-allowed-idents-below-min-chars = ["i", "j", "k", "x", "y", "z", "n", "T", "E", "ok", "id"]
+allowed-idents-below-min-chars = [
+    # generic short bindings idiomatic in Rust (1-2 chars)
+    "i", "j", "k", "x", "y", "z", "n", "T", "E", "ok", "id",
+    # idiomatic Rust standard library aliases (2 chars)
+    "io", "fs", "tx", "rx",
+    # 3-char idiomatic / domain identifiers
+    "Arc", "Key", "App", "app", "cwd", "pid", "New", "cli", "tui", "env",
+    # 3-char identifier emitted by `clap::Parser` derive-macro internals
+    "val",
+]
 single-char-binding-names-threshold = 0
 max-struct-bools               = 2
 max-fn-params-bools            = 1
