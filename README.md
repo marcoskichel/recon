@@ -90,10 +90,19 @@ roostr is built around **tmux**. Each Claude Code instance runs in its own tmux 
 ## Install
 
 ```bash
-cargo install --path .
+cargo install --path .          # build + install binary
+roostr setup all                # install tmux keybindings (daemon is opt-in)
+roostr setup daemon             # opt-in: install background summarizer service
 ```
 
 Requires tmux and [Claude Code](https://claude.ai/claude-code).
+
+`roostr setup` is a one-command installer for the tmux config and the daemon service. The daemon is **opt-in** — `setup all` installs the tmux config only; install the daemon explicitly if you want background summaries. Sub-commands:
+
+- `roostr setup tmux` — writes the bundled tmux keybindings to `~/.config/roostr/tmux.conf` and appends a `source-file` line to `~/.tmux.conf` (idempotent; `--force` overwrites a divergent config file).
+- `roostr setup daemon` — writes a user-level service unit (`~/.config/systemd/user/roostr-daemon.service` on Linux, `~/Library/LaunchAgents/com.roostr.daemon.plist` on macOS) using the running binary's path, then enables/loads it. `--interval <secs>` sets the poll interval, `--force` overwrites an existing unit.
+- `roostr setup all` — installs the tmux config. Add `--with-daemon` to also install the daemon in one shot.
+- `roostr setup uninstall` — reverses everything: removes the `source-file` line, deletes the bundled tmux config, disables and deletes the service unit. Idempotent — safe to run if pieces are already gone.
 
 ## Usage
 
@@ -115,6 +124,11 @@ roostr park                                   # Save all live sessions to disk
 roostr unpark                                 # Restore previously parked sessions
 roostr daemon                                 # Run the summarizer in the background
 roostr daemon --interval 30                   # Custom poll interval (seconds)
+roostr setup all                              # Install tmux keybindings (daemon opt-in)
+roostr setup all --with-daemon                # Install tmux keybindings + daemon
+roostr setup tmux                             # Just install tmux keybindings
+roostr setup daemon                           # Install the daemon as a user service
+roostr setup uninstall                        # Reverse install
 ```
 
 ## Daemon
@@ -135,107 +149,14 @@ The daemon needs at least one backend configured via environment variables:
 
 If neither Ollama nor `ANTHROPIC_API_KEY` is reachable, the daemon exits with an error.
 
-### Run on system startup — Linux (systemd user service)
+### Run on system startup
 
-Create `~/.config/systemd/user/roostr-daemon.service`:
+Use `roostr setup daemon` to install a user-level service:
 
-```ini
-[Unit]
-Description=roostr summarizer daemon
-After=default.target
+- **Linux** — writes `~/.config/systemd/user/roostr-daemon.service` and runs `systemctl --user enable --now`. Check with `systemctl --user status roostr-daemon.service`; follow logs with `journalctl --user -u roostr-daemon.service -f`. To keep the service running after logout, enable lingering once: `sudo loginctl enable-linger "$USER"`.
+- **macOS** — writes `~/Library/LaunchAgents/com.roostr.daemon.plist` and runs `launchctl load -w`. Check with `launchctl list | grep com.roostr.daemon`; logs go to `/tmp/roostr-daemon.{out,err}.log`.
 
-[Service]
-Type=simple
-ExecStart=%h/.cargo/bin/roostr daemon --interval 10
-Restart=on-failure
-RestartSec=5
-# Pick one backend. Either point at a running Ollama instance:
-Environment=ROOSTR_OLLAMA_URL=http://localhost:11434
-Environment=ROOSTR_OLLAMA_MODEL=gemma2:2b
-# …or use the Anthropic API (uncomment and set your key):
-# Environment=ANTHROPIC_API_KEY=sk-ant-...
-
-[Install]
-WantedBy=default.target
-```
-
-Enable and start it:
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now roostr-daemon.service
-systemctl --user status roostr-daemon.service
-journalctl --user -u roostr-daemon.service -f      # follow logs
-```
-
-To make the service start at boot (without you logging in), enable lingering once:
-
-```bash
-sudo loginctl enable-linger "$USER"
-```
-
-The daemon talks to your tmux server, so it must run as your user — not as a root system service.
-
-### Run on system startup — macOS (launchd LaunchAgent)
-
-Create `~/Library/LaunchAgents/com.roostr.daemon.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.roostr.daemon</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>/Users/YOUR_USERNAME/.cargo/bin/roostr</string>
-        <string>daemon</string>
-        <string>--interval</string>
-        <string>10</string>
-    </array>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <!-- Pick one backend: -->
-        <key>ROOSTR_OLLAMA_URL</key>
-        <string>http://localhost:11434</string>
-        <key>ROOSTR_OLLAMA_MODEL</key>
-        <string>gemma2:2b</string>
-        <!-- Or set ANTHROPIC_API_KEY here instead. -->
-    </dict>
-
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/tmp/roostr-daemon.out.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/roostr-daemon.err.log</string>
-</dict>
-</plist>
-```
-
-Replace `YOUR_USERNAME` with your macOS short name. Then load it:
-
-```bash
-launchctl load -w ~/Library/LaunchAgents/com.roostr.daemon.plist
-launchctl list | grep com.roostr.daemon                # check it's running
-tail -f /tmp/roostr-daemon.err.log                     # follow logs
-```
-
-To stop or remove it:
-
-```bash
-launchctl unload -w ~/Library/LaunchAgents/com.roostr.daemon.plist
-```
-
-LaunchAgents run as your user when you log in, which is required so the daemon can reach your tmux server.
+The daemon talks to your tmux server, so it must run as your user — not as a root system service. Edit the unit file directly if you want to customize environment variables or interval, then `systemctl --user daemon-reload && systemctl --user restart roostr-daemon.service` (Linux) or `launchctl unload && launchctl load -w …` (macOS). To remove the service, run `roostr setup uninstall`.
 
 ### Keybindings — Table View
 
@@ -266,20 +187,20 @@ LaunchAgents run as your user when you log in, which is required so the daemon c
 
 ## tmux config
 
-The included `tmux.conf` provides keybindings to open roostr as a popup overlay:
+`roostr setup tmux` installs the bundled keybindings — it writes the config to `~/.config/roostr/tmux.conf` and appends a `source-file` line to your `~/.tmux.conf`. Re-run with `--force` to overwrite a divergent config.
 
-```bash
-# Add to your ~/.tmux.conf — capital letters chosen so default tmux
-# bindings (e.g. prefix + n = next-window) stay intact.
-bind G display-popup -E -w 80% -h 60% "roostr"       # prefix + G → dashboard
-bind N display-popup -E -w 80% -h 60% "roostr new"    # prefix + N → new session
-bind i run-shell "roostr next"                         # prefix + i → jump to next input agent
-bind e run-shell "roostr dock-focus"                  # prefix + e → focus dock sidebar (spawn if missing)
-bind E run-shell "roostr dock-toggle"                 # prefix + E → toggle dock sidebar (open/close)
-bind X confirm-before -p "Kill session #S? (y/n)" kill-session
-```
+Lowercase `a` (unbound in default tmux) and capital letters are chosen so default tmux bindings (e.g. `prefix + n` = next-window) stay intact.
 
-This lets you pop open the dashboard from any tmux session, pick a session with `Enter`, and jump straight to it. `prefix + e` spawns/kills a 14-col dock pane on the right of the current window — the dock shows a mini sprite + token bar per session and supports the same keys as the main view (`hjkl`, `Enter`, `x`, `n`, `1`-`9`, `q`).
+| Keybind | Action |
+|---|---|
+| `prefix + a` | Toggle the dashboard tmux window (focus / open / close) |
+| `prefix + N` | Open the new-session form as a popup |
+| `prefix + i` | Jump to the next agent waiting for input |
+| `prefix + e` | Focus the dock sidebar (spawn if missing) |
+| `prefix + E` | Toggle the dock sidebar open/close |
+| `prefix + X` | Kill the current tmux session (with confirm) |
+
+The config also installs `after-new-window` and `session-created` hooks that auto-spawn the dock pane on the right of every new window. `prefix + e` / `E` lets you focus or close it on demand — the dock shows a mini sprite + token bar per session and supports the same keys as the main view (`hjkl`, `Enter`, `x`, `n`, `1`-`9`, `q`).
 
 ## Known Limitations
 

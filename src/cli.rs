@@ -37,4 +37,39 @@ pub enum Command {
     /// it exists elsewhere, kill it if already focused, or create it.
     /// Designed for a single-keystroke binding (e.g. `C-y`).
     Toggle,
+    /// One-command install for tmux keybindings and the daemon service.
+    Setup {
+        #[command(subcommand)]
+        action: SetupAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SetupAction {
+    /// Install tmux keybindings (writes ~/.config/roostr/tmux.conf and sources it from ~/.tmux.conf).
+    Tmux {
+        #[arg(long)]
+        force: bool,
+    },
+    /// Install daemon as a user service (systemd on Linux, launchd on macOS).
+    Daemon {
+        #[arg(long)]
+        force: bool,
+        /// Poll interval seconds (default 10).
+        #[arg(long, default_value_t = 10u64)]
+        interval: u64,
+    },
+    /// Install tmux config (and optionally the daemon with --with-daemon).
+    /// Daemon is opt-in: pass --with-daemon to also install the background service.
+    All {
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value_t = 10u64)]
+        interval: u64,
+        /// Also install the summarizer daemon as a user service.
+        #[arg(long)]
+        with_daemon: bool,
+    },
+    /// Reverse install: remove sourced line, delete unit, disable service.
+    Uninstall,
 }
