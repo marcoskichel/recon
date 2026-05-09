@@ -12,11 +12,16 @@ pub fn run(action: cli::SetupAction) -> io::Result<()> {
     match action {
         cli::SetupAction::Tmux { force } => install_tmux(force),
         cli::SetupAction::Daemon { force, interval } => install_daemon(force, interval),
-        cli::SetupAction::All { force, interval } => {
+        cli::SetupAction::All { force, interval, with_daemon } => {
             if let Err(e) = install_tmux(force) {
                 eprintln!("warning: tmux setup failed: {e}");
             }
-            install_daemon(force, interval)
+            if with_daemon {
+                install_daemon(force, interval)
+            } else {
+                println!("daemon: skipped (opt-in). Run `roostr setup daemon` to install.");
+                Ok(())
+            }
         }
         cli::SetupAction::Uninstall => uninstall(),
     }

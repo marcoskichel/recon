@@ -91,16 +91,17 @@ roostr is built around **tmux**. Each Claude Code instance runs in its own tmux 
 
 ```bash
 cargo install --path .          # build + install binary
-roostr setup all                # install tmux keybindings + daemon
+roostr setup all                # install tmux keybindings (daemon is opt-in)
+roostr setup daemon             # opt-in: install background summarizer service
 ```
 
 Requires tmux and [Claude Code](https://claude.ai/claude-code).
 
-`roostr setup` is a one-command installer that takes care of the tmux config and the daemon service. Sub-commands:
+`roostr setup` is a one-command installer for the tmux config and the daemon service. The daemon is **opt-in** — `setup all` installs the tmux config only; install the daemon explicitly if you want background summaries. Sub-commands:
 
 - `roostr setup tmux` — writes the bundled tmux keybindings to `~/.config/roostr/tmux.conf` and appends a `source-file` line to `~/.tmux.conf` (idempotent; `--force` overwrites a divergent config file).
 - `roostr setup daemon` — writes a user-level service unit (`~/.config/systemd/user/roostr-daemon.service` on Linux, `~/Library/LaunchAgents/com.roostr.daemon.plist` on macOS) using the running binary's path, then enables/loads it. `--interval <secs>` sets the poll interval, `--force` overwrites an existing unit.
-- `roostr setup all` — runs both of the above.
+- `roostr setup all` — installs the tmux config. Add `--with-daemon` to also install the daemon in one shot.
 - `roostr setup uninstall` — reverses everything: removes the `source-file` line, deletes the bundled tmux config, disables and deletes the service unit. Idempotent — safe to run if pieces are already gone.
 
 ## Usage
@@ -123,9 +124,10 @@ roostr park                                   # Save all live sessions to disk
 roostr unpark                                 # Restore previously parked sessions
 roostr daemon                                 # Run the summarizer in the background
 roostr daemon --interval 30                   # Custom poll interval (seconds)
-roostr setup all                              # Install tmux keybindings + daemon service
+roostr setup all                              # Install tmux keybindings (daemon opt-in)
+roostr setup all --with-daemon                # Install tmux keybindings + daemon
 roostr setup tmux                             # Just install tmux keybindings
-roostr setup daemon                           # Just install the daemon as a user service
+roostr setup daemon                           # Install the daemon as a user service
 roostr setup uninstall                        # Reverse install
 ```
 

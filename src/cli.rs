@@ -59,12 +59,16 @@ pub enum SetupAction {
         #[arg(long, default_value_t = 10u64)]
         interval: u64,
     },
-    /// Install both tmux config and daemon.
+    /// Install tmux config (and optionally the daemon with --with-daemon).
+    /// Daemon is opt-in: pass --with-daemon to also install the background service.
     All {
         #[arg(long)]
         force: bool,
         #[arg(long, default_value_t = 10u64)]
         interval: u64,
+        /// Also install the summarizer daemon as a user service.
+        #[arg(long)]
+        with_daemon: bool,
     },
     /// Reverse install: remove sourced line, delete unit, disable service.
     Uninstall,
