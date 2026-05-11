@@ -3,10 +3,12 @@
 //! Reads a Claude Code JSONL session file, filters out tool noise, and assembles a compact
 //! transcript prompt for the configured backend. Also provides label normalization helpers.
 
-use std::fmt::Write as _;
-use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::{
+    fmt::Write as _,
+    fs,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
 /// Maximum number of user messages to include in a prompt.
 pub(super) const MAX_USER_PROMPTS: usize = 15;

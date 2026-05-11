@@ -12,8 +12,7 @@ use ratatui::{
     text::Span,
 };
 
-use crate::model;
-use crate::session::Session;
+use crate::{model, session::Session};
 
 /// Width of the fixed-size bar produced by [`context_bar`], in cells.
 const FIXED_BAR_WIDTH: usize = 6;

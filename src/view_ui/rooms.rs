@@ -3,8 +3,10 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::app::App;
-use crate::session::{Session, SessionStatus};
+use crate::{
+    app::App,
+    session::{Session, SessionStatus},
+};
 
 /// A group of sessions sharing a project (the visible "room" in the UI).
 pub struct Room {

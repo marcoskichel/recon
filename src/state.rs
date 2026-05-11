@@ -1,7 +1,6 @@
 //! Disk-backed dashboard state (selection, room layout, sprite assignments).
 
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 

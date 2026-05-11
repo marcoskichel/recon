@@ -1,7 +1,9 @@
 //! Local `claude` CLI subprocess client for the summarizer.
 
-use std::io::Write as _;
-use std::process::{Command, Stdio};
+use std::{
+    io::Write as _,
+    process::{Command, Stdio},
+};
 
 use super::prompt::clean_label;
 

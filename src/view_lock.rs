@@ -3,9 +3,7 @@
 //! The summarizer daemon polls this file and pauses while the TUI holds
 //! the lock, so the dashboard does not contend with the background process.
 
-use std::fs as filesystem;
-use std::path::PathBuf;
-use std::process;
+use std::{fs as filesystem, path::PathBuf, process};
 
 /// Resolve the pidfile path used to coordinate TUI/daemon hand-off.
 fn lock_path() -> Option<PathBuf> {

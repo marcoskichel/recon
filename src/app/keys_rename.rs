@@ -2,8 +2,10 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::keys::{char_byte_offset, KeyOutcome};
-use super::{Application, InputMode};
+use super::{
+    keys::{char_byte_offset, KeyOutcome},
+    Application, InputMode,
+};
 
 impl Application {
     /// Rename-overlay key handler.

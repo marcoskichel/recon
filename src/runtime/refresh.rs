@@ -1,10 +1,7 @@
 //! Background worker thread that polls `session::discover_sessions` and
 //! ships fresh snapshots over an mpsc channel to the foreground TUI.
 
-use std::collections::HashMap;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+use std::{collections::HashMap, sync::mpsc, thread, time::Duration};
 
 use crate::session::{self, Session};
 

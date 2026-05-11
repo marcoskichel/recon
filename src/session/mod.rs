@@ -7,8 +7,10 @@
 //!
 //! See [`discover_sessions`] for the entry point.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 mod discover;
 mod git_info;

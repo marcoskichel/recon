@@ -1,16 +1,20 @@
 //! Worker thread loop that drains the [`LabelJob`] queue and produces labels.
 
-use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    path::PathBuf,
+    sync::mpsc::Receiver,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use super::anthropic::{call_anthropic, AnthropicCall};
-use super::backend::Backend;
-use super::cache::persist_label;
-use super::claude_cli::call_claude_cli;
-use super::ollama::{call_ollama, prewarm_ollama, OllamaCall};
-use super::prompt::{build_prompt, is_keep_response};
-use super::store::{CachedLabel, LabelStore};
+use super::{
+    anthropic::{call_anthropic, AnthropicCall},
+    backend::Backend,
+    cache::persist_label,
+    claude_cli::call_claude_cli,
+    ollama::{call_ollama, prewarm_ollama, OllamaCall},
+    prompt::{build_prompt, is_keep_response},
+    store::{CachedLabel, LabelStore},
+};
 
 /// Worker timeout for one HTTP call to a backend (1 minute).
 const HTTP_TIMEOUT: Duration = Duration::from_mins(1);

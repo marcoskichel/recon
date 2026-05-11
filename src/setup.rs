@@ -1,10 +1,12 @@
 //! Implementation of the `roostr setup` subcommands: install/uninstall the
 //! tmux configuration snippet and the per-user summarizer daemon service.
 
-use std::fs as filesystem;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    fs as filesystem,
+    io::{self, Write},
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use crate::cli::SetupAction;
 

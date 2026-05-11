@@ -4,9 +4,8 @@
 
 use std::path::PathBuf;
 
-use crate::session::{Session, SessionStatus};
-
 use super::rooms::group_into_rooms;
+use crate::session::{Session, SessionStatus};
 
 /// Build a synthetic [`Session`] for tests with the minimum fields the
 /// grouping logic looks at.

@@ -10,11 +10,13 @@
 //! (Documents, Desktop, etc.) triggers a system permission prompt. We bail
 //! out early for those paths unless explicitly allow-listed.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::{Mutex, OnceLock},
+    time::{Duration, Instant},
+};
 
 /// Cached repo-name + relative-dir for a CWD. These don't change per CWD,
 /// so the cache has no TTL.
@@ -306,8 +308,9 @@ pub fn decode_project_path(project_dir: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::is_tcc_protected_with;
     use std::path::{Path, PathBuf};
+
+    use super::is_tcc_protected_with;
 
     /// All TCC-protected dirs under home are detected.
     ///

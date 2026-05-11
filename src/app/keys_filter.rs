@@ -3,10 +3,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use super::{
+    keys::{char_byte_offset, KeyOutcome},
+    Application, InputMode,
+};
 use crate::tmux;
-
-use super::keys::{char_byte_offset, KeyOutcome};
-use super::{Application, InputMode};
 
 impl Application {
     /// Filter-overlay key handler.

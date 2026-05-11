@@ -13,20 +13,20 @@ mod input_data;
 mod new_data;
 mod working_data;
 
+use idle_data::IDLE_SPRITES;
+use input_data::INPUT_SPRITES;
+use new_data::NEW_SPRITES;
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
 };
-
-use crate::session::SessionStatus;
-
-use super::palettes::SPECIES_PALETTES;
-use super::types::{Palette, Sprite, SPECIES_COUNT, SPRITE_H, SPRITE_W};
-
-use idle_data::IDLE_SPRITES;
-use input_data::INPUT_SPRITES;
-use new_data::NEW_SPRITES;
 use working_data::WORKING_SPRITES;
+
+use super::{
+    palettes::SPECIES_PALETTES,
+    types::{Palette, Sprite, SPECIES_COUNT, SPRITE_H, SPRITE_W},
+};
+use crate::session::SessionStatus;
 
 /// Number of animation frames in [`WORKING_SPRITES`] and [`INPUT_SPRITES`].
 const ANIM_FRAMES: usize = 3;

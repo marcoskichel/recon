@@ -3,8 +3,10 @@
 //! The store is shared between the public [`crate::summarizer::Summarizer`] handle and the
 //! background worker thread; it is cheap to clone via an internal `Arc<Mutex<_>>`.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use serde::{Deserialize, Serialize};
 

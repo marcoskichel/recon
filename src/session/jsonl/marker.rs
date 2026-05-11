@@ -1,10 +1,8 @@
 //! Detect the `<local-command-stdout>Set model to ...` marker emitted by
 //! the `/model` slash command and update model + effort accordingly.
 
+use super::{ansi::strip_ansi, Accumulator};
 use crate::model;
-
-use super::ansi::strip_ansi;
-use super::Accumulator;
 
 const MARKER: &str = "<local-command-stdout>Set model to";
 

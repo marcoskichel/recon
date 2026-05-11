@@ -9,19 +9,19 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
-use crate::session::Session;
-
-use super::animation::{animation_frame, session_phase_offset, status_color};
-use super::context_bar::{session_permille, wide_context_bar};
-use super::overlay::{render_agent_label, AgentLabelInputs};
-use super::palettes::SPECIES_PALETTES;
-use super::sprites::{render_sprite_lines, sprite_data};
-use super::text::{
-    agent_display_name, elapsed_hms, pick_species, sanitize_prompt, species_for, truncate_str,
-    wrap_label,
+use super::{
+    animation::{animation_frame, session_phase_offset, status_color},
+    context_bar::{session_permille, wide_context_bar},
+    overlay::{render_agent_label, AgentLabelInputs},
+    palettes::SPECIES_PALETTES,
+    sprites::{render_sprite_lines, sprite_data},
+    text::{
+        agent_display_name, elapsed_hms, pick_species, sanitize_prompt, species_for, truncate_str,
+        wrap_label,
+    },
+    types::{COMPACT_SPRITE_COLS, SPECIES_COUNT, SPRITE_RENDER_H},
 };
-use super::types::{COMPACT_SPRITE_COLS, SPECIES_COUNT, SPRITE_RENDER_H};
+use crate::{app::App, session::Session};
 
 /// Color used for inactive (non-selected) compact card borders.
 const INACTIVE_BORDER: Color = Color::Rgb(60, 60, 70);

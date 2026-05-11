@@ -3,11 +3,11 @@
 //! Each enum variant carries the configuration needed to make a single
 //! request via the corresponding submodule (`anthropic`, `claude_cli`, or `ollama`).
 
-use super::anthropic::ANTHROPIC_DEFAULT_MODEL;
-use super::claude_cli::{
-    claude_cli_available, CLAUDE_CLI_DEFAULT_BINARY, CLAUDE_CLI_DEFAULT_MODEL,
+use super::{
+    anthropic::ANTHROPIC_DEFAULT_MODEL,
+    claude_cli::{claude_cli_available, CLAUDE_CLI_DEFAULT_BINARY, CLAUDE_CLI_DEFAULT_MODEL},
+    ollama::{ollama_reachable, OLLAMA_DEFAULT_MODEL, OLLAMA_DEFAULT_URL},
 };
-use super::ollama::{ollama_reachable, OLLAMA_DEFAULT_MODEL, OLLAMA_DEFAULT_URL};
 
 /// Configured target for an LLM completion call.
 pub(super) enum Backend {

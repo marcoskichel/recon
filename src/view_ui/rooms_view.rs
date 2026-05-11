@@ -9,12 +9,13 @@ use ratatui::{
     Frame,
 };
 
+use super::{
+    card_grid::{render_card_grid, CardGridInputs},
+    footer::{render_empty, render_loading},
+    rooms::{group_into_rooms_stable, Room},
+    types::{COMPACT_CARD_HEIGHT, COMPACT_CARD_WIDTH},
+};
 use crate::app::App;
-
-use super::card_grid::{render_card_grid, CardGridInputs};
-use super::footer::{render_empty, render_loading};
-use super::rooms::{group_into_rooms_stable, Room};
-use super::types::{COMPACT_CARD_HEIGHT, COMPACT_CARD_WIDTH};
 
 /// Vertical gap between adjacent rooms in the stacked overview.
 const ROOM_GAP: u16 = 1;

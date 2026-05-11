@@ -1,7 +1,6 @@
 //! Shared helper for invoking the `tmux` binary and capturing stdout.
 
-use std::io;
-use std::process::Command as ProcCommand;
+use std::{io, process::Command as ProcCommand};
 
 /// Run `tmux` with the given arguments and return trimmed stdout.
 ///

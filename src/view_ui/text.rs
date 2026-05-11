@@ -9,10 +9,8 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::app::App;
-use crate::session::Session;
-
 use super::types::{SPECIES_COUNT, SPECIES_NAMES};
+use crate::{app::App, session::Session};
 
 /// FNV-1a offset basis used by [`pick_species`].
 const FNV_OFFSET_BASIS: u64 = 2_166_136_261;

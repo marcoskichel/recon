@@ -9,12 +9,13 @@ use ratatui::{
     Frame,
 };
 
+use super::{
+    character::{render_character, CharacterParams},
+    character_compact::{render_character_compact, CompactParams},
+    rooms::Room,
+    types::{CHAR_HEIGHT, CHAR_WIDTH, COMPACT_CARD_HEIGHT, COMPACT_CARD_WIDTH},
+};
 use crate::app::App;
-
-use super::character::{render_character, CharacterParams};
-use super::character_compact::{render_character_compact, CompactParams};
-use super::rooms::Room;
-use super::types::{CHAR_HEIGHT, CHAR_WIDTH, COMPACT_CARD_HEIGHT, COMPACT_CARD_WIDTH};
 
 /// Highest agent label number that gets a digit shortcut (`1..=9`).
 const MAX_LABEL: usize = 9;

@@ -25,17 +25,15 @@ mod sprites;
 pub mod text;
 pub mod types;
 
+use footer::{render_footer, render_rename_bar, render_search_bar};
 use ratatui::{
     layout::{Constraint, Layout},
     Frame,
 };
-
-use crate::app::App;
+use rooms_view::render_rooms;
 
 use self::rooms::{group_into_rooms_stable, update_room_order};
-
-use footer::{render_footer, render_rename_bar, render_search_bar};
-use rooms_view::render_rooms;
+use crate::app::App;
 
 /// Promote `view_zoom_index` into a concrete `view_zoomed_room` and clamp
 /// selection within the active room (or across rooms when no zoom is set).

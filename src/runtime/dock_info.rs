@@ -1,15 +1,21 @@
 //! `roostr dock-info` — popup-friendly session detail view.
 
-use std::io::{self, Write};
-use std::time::Duration;
+use std::{
+    io::{self, Write},
+    time::Duration,
+};
 
-use crossterm::event::{self, Event};
-use crossterm::style::Stylize;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::{
+    event::{self, Event},
+    style::Stylize,
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
 
-use crate::app::App;
-use crate::model;
-use crate::session::{Session, SessionStatus};
+use crate::{
+    app::App,
+    model,
+    session::{Session, SessionStatus},
+};
 
 /// Wrap `text` to lines no wider than `max_width` graphemes.
 ///

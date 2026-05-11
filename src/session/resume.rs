@@ -6,9 +6,7 @@
 //! session-id). To reunite display state with the right transcript we have
 //! to recover that original id.
 
-use std::fs::read_dir;
-use std::path::PathBuf;
-use std::process::Command;
+use std::{fs::read_dir, path::PathBuf, process::Command};
 
 /// For a resumed session, find the original JSONL by locating the session-id
 /// that `claude --resume` was called with.

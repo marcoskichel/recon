@@ -3,16 +3,20 @@
 //! Joins JSONL transcripts under `~/.claude/projects/` with the live tmux
 //! session map produced by [`super::live::build_live_session_map`].
 
-use std::collections::{HashMap, HashSet};
-use std::fs::read_dir;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::read_dir,
+    path::{Path, PathBuf},
+};
 
-use super::git_info::{decode_project_path, git_project_info};
-use super::jsonl::{parse_jsonl, ParseInputs, ParsedInfo};
-use super::live::{build_live_session_map, LiveSessionInfo};
-use super::resume::find_jsonl_for_resumed_session;
-use super::status::determine_status;
-use super::{Session, SessionStatus};
+use super::{
+    git_info::{decode_project_path, git_project_info},
+    jsonl::{parse_jsonl, ParseInputs, ParsedInfo},
+    live::{build_live_session_map, LiveSessionInfo},
+    resume::find_jsonl_for_resumed_session,
+    status::determine_status,
+    Session, SessionStatus,
+};
 
 /// Discover sessions by scanning JSONL files, then matching to live tmux
 /// panes.

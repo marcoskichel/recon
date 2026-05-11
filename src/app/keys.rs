@@ -9,11 +9,8 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::session;
-use crate::tmux;
-use crate::view_ui;
-
 use super::{Application, InputMode};
+use crate::{session, tmux, view_ui};
 
 /// Outcome of a single key dispatch helper. `Handled` short-circuits the
 /// caller; `Unhandled` lets it fall through to the next stage.

@@ -1,10 +1,11 @@
 //! Action helpers triggered by key bindings — attach, kill, spawn, open
 //! external TUIs, and so on.
 
+use super::{
+    keys::{binary_in_path, file_name_or, KeyOutcome},
+    Application,
+};
 use crate::tmux;
-
-use super::keys::{binary_in_path, file_name_or, KeyOutcome};
-use super::Application;
 
 impl Application {
     /// Attach to the compact-view selection.

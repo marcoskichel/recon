@@ -1,24 +1,21 @@
 //! `roostr` (default) — the interactive ratatui dashboard.
 
-use std::io::{self, Write};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
-
-use crossterm::event::{self, Event};
-use crossterm::execute;
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+use std::{
+    io::{self, Write},
+    sync::mpsc,
+    thread,
+    time::Duration,
 };
-use ratatui::prelude::CrosstermBackend;
-use ratatui::Terminal;
 
-use crate::app::App;
-use crate::session::Session;
-use crate::view_lock;
-use crate::view_ui;
+use crossterm::{
+    event::{self, Event},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{prelude::CrosstermBackend, Terminal};
 
 use super::refresh::run_refresh_worker;
+use crate::{app::App, session::Session, view_lock, view_ui};
 
 /// Set up the alternate-screen terminal, run the event loop, and tear down.
 ///

@@ -2,8 +2,10 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use super::keys::{digit_index, KeyOutcome};
-use super::{Application, InputMode};
+use super::{
+    keys::{digit_index, KeyOutcome},
+    Application, InputMode,
+};
 
 impl Application {
     /// Default key handler — used when no modal overlay is active.

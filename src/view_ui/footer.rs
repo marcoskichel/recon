@@ -10,10 +10,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
-use crate::session::SessionStatus;
-
 use super::sprites::{render_sprite_lines, sprite_data};
+use crate::{app::App, session::SessionStatus};
 
 /// Render the `/`-prefixed search input bar.
 pub(super) fn render_search_bar(frame: &mut Frame, dashboard: &App, area: Rect) {

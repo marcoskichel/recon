@@ -8,9 +8,11 @@
 //! Parsing is incremental: callers pass the previous file size, and we
 //! seek to that offset before reading. This keeps polling cheap.
 
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
+    path::Path,
+};
 
 use serde::Deserialize;
 
@@ -347,8 +349,9 @@ fn apply_user_or_system_line(trimmed: &str, accumulator: &mut Accumulator) {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_line_capped, MAX_LINE_BYTES};
     use std::io::{BufReader, Cursor};
+
+    use super::{read_line_capped, MAX_LINE_BYTES};
 
     /// Two consecutive lines plus EOF.
     ///

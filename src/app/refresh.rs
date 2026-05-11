@@ -3,10 +3,11 @@
 
 use std::collections::HashSet;
 
-use crate::session::{self, Session};
-use crate::view_ui;
-
 use super::Application;
+use crate::{
+    session::{self, Session},
+    view_ui,
+};
 
 impl Application {
     /// Synchronously poll the system for live sessions and apply the result.

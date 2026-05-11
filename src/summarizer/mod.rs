@@ -14,17 +14,23 @@ mod prompt;
 mod runtime;
 pub mod store;
 
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{channel, Sender},
+        Arc, Mutex,
+    },
+    thread,
+};
 
-use self::backend::select_backend;
-use self::cache::load_cache_into;
-use self::runtime::{unix_now, worker_loop, LabelJob};
-use self::store::LabelStore;
+use self::{
+    backend::select_backend,
+    cache::load_cache_into,
+    runtime::{unix_now, worker_loop, LabelJob},
+    store::LabelStore,
+};
 
 /// Minimum number of seconds between two enqueues for the same session.
 const MIN_DEBOUNCE_SECS: u64 = 300;

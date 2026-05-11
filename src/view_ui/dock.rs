@@ -11,16 +11,19 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
-use crate::session::{Session, SessionStatus};
-
-use super::animation::{animation_frame, session_phase_offset};
-use super::context_bar::{session_permille, threshold_color};
-use super::footer::render_search_bar;
-use super::rooms::group_into_rooms_stable;
-use super::sprites::{render_sprite_compact, sprite_data};
-use super::text::pick_species;
-use super::types::{DOCK_CARD_H, DOCK_CARD_W, MINI_SPRITE_H};
+use super::{
+    animation::{animation_frame, session_phase_offset},
+    context_bar::{session_permille, threshold_color},
+    footer::render_search_bar,
+    rooms::group_into_rooms_stable,
+    sprites::{render_sprite_compact, sprite_data},
+    text::pick_species,
+    types::{DOCK_CARD_H, DOCK_CARD_W, MINI_SPRITE_H},
+};
+use crate::{
+    app::App,
+    session::{Session, SessionStatus},
+};
 
 /// Color used for inactive card borders in the dock view.
 const DOCK_BORDER_INACTIVE: Color = Color::Rgb(60, 60, 70);

@@ -1,10 +1,11 @@
 //! `roostr daemon` — background summarizer poller.
 
-use std::io::{self, Write};
-use std::time::Duration;
+use std::{
+    io::{self, Write},
+    time::Duration,
+};
 
-use crate::app::App;
-use crate::view_lock;
+use crate::{app::App, view_lock};
 
 /// Run the summarizer daemon loop.
 ///

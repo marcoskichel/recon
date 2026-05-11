@@ -1,8 +1,10 @@
 //! Live session discovery — joins tmux panes with `~/.claude/sessions/`.
 
-use std::collections::{HashMap, HashSet};
-use std::fs::{read_dir, read_to_string};
-use std::process::Command;
+use std::{
+    collections::{HashMap, HashSet},
+    fs::{read_dir, read_to_string},
+    process::Command,
+};
 
 /// Info about a live Claude session, built from tmux + session files.
 pub struct LiveSessionInfo {

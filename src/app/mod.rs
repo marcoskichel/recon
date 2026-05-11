@@ -19,13 +19,17 @@ mod keys_normal;
 mod keys_rename;
 mod refresh;
 
-use std::cell::Cell;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::{
+    cell::Cell,
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
-use crate::session::Session;
-use crate::state::{self, PersistedState};
-use crate::summarizer::Summarizer;
+use crate::{
+    session::Session,
+    state::{self, PersistedState},
+    summarizer::Summarizer,
+};
 
 /// How long a transient status-bar message remains visible.
 const STATUS_MESSAGE_TTL: Duration = Duration::from_secs(3);

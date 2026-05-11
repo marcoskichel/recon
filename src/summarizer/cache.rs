@@ -3,8 +3,7 @@
 //! Labels are persisted under the user's cache directory so that previously
 //! computed topic strings survive across daemon and TUI restarts.
 
-use std::fs;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use super::store::{CachedLabel, LabelStore};
 

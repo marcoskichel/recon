@@ -9,18 +9,18 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
-use crate::session::Session;
-
-use super::animation::{animation_frame, session_phase_offset};
-use super::context_bar::{context_bar, session_permille};
-use super::overlay::{render_agent_label, AgentLabelInputs};
-use super::palettes::SPECIES_PALETTES;
-use super::sprites::{render_sprite_lines, sprite_data};
-use super::text::{
-    agent_display_name, pick_species, sanitize_prompt, species_for, truncate_str, wrap_label,
+use super::{
+    animation::{animation_frame, session_phase_offset},
+    context_bar::{context_bar, session_permille},
+    overlay::{render_agent_label, AgentLabelInputs},
+    palettes::SPECIES_PALETTES,
+    sprites::{render_sprite_lines, sprite_data},
+    text::{
+        agent_display_name, pick_species, sanitize_prompt, species_for, truncate_str, wrap_label,
+    },
+    types::SPECIES_COUNT,
 };
-use super::types::SPECIES_COUNT;
+use crate::{app::App, session::Session};
 
 /// Background color for the selected card highlight.
 const SELECTED_BG: Color = Color::Rgb(40, 40, 60);

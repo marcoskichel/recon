@@ -5,10 +5,8 @@
 //! "selected agent" indices and `(room, row, column)` triples so the key
 //! handler can move the cursor j/k/h/l around the grid.
 
-use crate::session::Session;
-use crate::view_ui;
-
 use super::Application;
+use crate::{session::Session, view_ui};
 
 /// Per-room layout: `(session_count, row_count, base_offset_into_flat_list)`.
 type RoomLayout = (usize, usize, usize);
