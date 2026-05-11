@@ -1,13 +1,17 @@
+//! Command-line interface definitions for the `roostr` binary.
+
 use clap::{Parser, Subcommand};
 
 /// Monitor Claude Code sessions running in tmux (compact view).
 #[derive(Parser)]
 #[command(name = "roostr", version)]
-pub struct Cli {
+pub struct CliArgs {
+    /// Optional subcommand; when omitted the TUI is launched.
     #[command(subcommand)]
     pub command: Option<Command>,
 }
 
+/// Top-level subcommands exposed by the `roostr` binary.
 #[derive(Subcommand)]
 pub enum Command {
     /// Run summarizer in background. Polls active claude sessions, enqueues
@@ -39,20 +43,24 @@ pub enum Command {
     Toggle,
     /// One-command install for tmux keybindings and the daemon service.
     Setup {
+        /// Which install/uninstall step to run.
         #[command(subcommand)]
         action: SetupAction,
     },
 }
 
+/// Sub-actions for `roostr setup`.
 #[derive(Subcommand)]
 pub enum SetupAction {
     /// Install tmux keybindings (writes ~/.config/roostr/tmux.conf and sources it from ~/.tmux.conf).
     Tmux {
+        /// Overwrite an existing config without prompting.
         #[arg(long)]
         force: bool,
     },
     /// Install daemon as a user service (systemd on Linux, launchd on macOS).
     Daemon {
+        /// Overwrite an existing service unit without prompting.
         #[arg(long)]
         force: bool,
         /// Poll interval seconds (default 10).
@@ -61,9 +69,12 @@ pub enum SetupAction {
     },
     /// Install tmux config (and optionally the daemon with --with-daemon).
     /// Daemon is opt-in: pass --with-daemon to also install the background service.
-    All {
+    #[command(name = "all")]
+    Everything {
+        /// Overwrite existing files without prompting.
         #[arg(long)]
         force: bool,
+        /// Poll interval seconds passed through to the daemon installer.
         #[arg(long, default_value_t = 10u64)]
         interval: u64,
         /// Also install the summarizer daemon as a user service.

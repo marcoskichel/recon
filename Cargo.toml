@@ -11,6 +11,87 @@ readme = "README.md"
 keywords = ["tmux", "claude", "tui", "dashboard", "ratatui"]
 categories = ["command-line-utilities"]
 
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+non_ascii_idents = "deny"
+non_snake_case = "deny"
+
+[lints.clippy]
+# groups (low priority so per-lint overrides win)
+pedantic = { level = "warn", priority = -1 }
+nursery  = { level = "warn", priority = -1 }
+
+# panic / abort
+unwrap_used      = "deny"
+expect_used      = "deny"
+panic            = "deny"
+todo             = "deny"
+unimplemented    = "deny"
+unwrap_in_result = "deny"
+
+# debug leakage
+dbg_macro    = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+# arithmetic
+arithmetic_side_effects = "deny"
+float_arithmetic        = "deny"
+
+# casts
+as_conversions           = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap       = "deny"
+cast_sign_loss           = "deny"
+cast_precision_loss      = "deny"
+
+# memory
+mem_forget = "deny"
+
+# indexing
+indexing_slicing = "deny"
+string_slice     = "deny"
+
+# match
+wildcard_enum_match_arm = "deny"
+match_same_arms         = "deny"
+
+# naming
+min_ident_chars            = "deny"
+single_char_lifetime_names = "deny"
+similar_names              = "warn"
+
+# shadowing
+shadow_reuse     = "deny"
+shadow_same      = "deny"
+shadow_unrelated = "deny"
+
+# control-flow
+else_if_without_else  = "warn"
+pattern_type_mismatch = "warn"
+
+# complexity (thresholds in clippy.toml)
+too_many_lines       = "deny"
+cognitive_complexity = "deny"
+too_many_arguments   = "deny"
+
+# docs
+missing_docs_in_private_items   = "warn"
+allow_attributes_without_reason = "deny"
+
+# module structure
+self_named_module_files = "deny"
+
+# API hygiene
+pub_use            = "warn"
+unreadable_literal = "deny"
+must_use_candidate = "warn"
+
+# booleans
+struct_excessive_bools    = "deny"
+fn_params_excessive_bools = "deny"
+
 [dependencies]
 ratatui = "0.29"
 crossterm = { version = "0.28", features = ["event-stream"] }
@@ -20,3 +101,4 @@ dirs = "6"
 clap = { version = "4", features = ["derive"] }
 ureq = { version = "2", features = ["json", "tls"], default-features = false }
 libc = "0.2"
+nix = { version = "0.29", features = ["signal"] }

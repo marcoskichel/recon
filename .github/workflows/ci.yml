@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    name: Stable — build / clippy / test / file-length
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+          cache: true
+
+      - name: Build
+        run: cargo build --all-targets --all-features
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Tests
+        run: cargo test --all-features
+
+      - name: File length gate
+        run: bash ci/check_file_length.sh
+
+  fmt:
+    name: Nightly — rustfmt (unstable opts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: rustfmt
+          cache: false
+
+      - name: rustfmt --check
+        run: cargo +nightly fmt --all -- --check
