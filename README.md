@@ -8,15 +8,11 @@ Each Claude Code instance becomes a sprite in a grouped room. Glance at the dash
 
 ### Full dashboard
 
-<video src="https://github.com/marcoskichel/roostr/raw/main/assets/fullscreen.mp4" controls width="720"></video>
-
-> If the video doesn't play inline, [download fullscreen.mp4](assets/fullscreen.mp4).
+![Full dashboard demo](assets/fullscreen.gif)
 
 ### Sidebar dock
 
-<video src="https://github.com/marcoskichel/roostr/raw/main/assets/sidebar.mp4" controls width="360"></video>
-
-> If the video doesn't play inline, [download sidebar.mp4](assets/sidebar.mp4).
+<img src="assets/sidebar.gif" alt="Sidebar dock demo" width="360">
 
 The dock is a narrow tmux pane that auto-spawns on the right of every window. One mini-sprite per session with a context bar — same keybindings as the main view.
 
