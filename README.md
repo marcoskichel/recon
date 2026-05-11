@@ -108,7 +108,7 @@ Lowercase `a` is unbound in default tmux; capitals stay clear of `prefix + n` (n
 | `prefix + E` | Toggle the dock sidebar open/close |
 | `prefix + X` | Kill the current tmux session (with confirm) |
 
-The config also adds `after-new-window` and `session-created` hooks that auto-spawn the dock pane on every new window.
+The config also adds `after-new-window` and `session-created` hooks that auto-spawn the dock pane on every new window, except the `roostr` dashboard window.
 
 ## Daemon
 
